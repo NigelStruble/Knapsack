@@ -292,7 +292,6 @@ Satchel/
   Options.lua     The options window
   Core.lua        Startup and /satchel
 tests/            Tests run against a mock of the WoW API
-tools/            Helper scripts
 ```
 
 Run the tests with Lua 5.1 from the repository root:
@@ -308,14 +307,9 @@ makes it an Anniversary client (a bank of one container and bank bags, a
 keyring, no `C_TooltipInfo`, `OnTooltipSetItem`), which the "Classic:" tests
 use.
 
-While developing, you can link the folder into the game instead of copying it,
-so changes show up after a `/reload`:
-
-```powershell
-.\tools\link-addon.ps1
-.\tools\link-addon.ps1 -Flavors _classic_beta_, _anniversary_
-.\tools\link-addon.ps1 -Flavors _classic_beta_ -Remove
-```
+While developing, you can link the `Satchel` folder into the game's AddOns
+folder (a directory junction or symbolic link) instead of copying it, so
+changes show up after a `/reload`.
 
 When a patch changes the interface number, add the new number to the
 `## Interface:` line in `Satchel.toc`.

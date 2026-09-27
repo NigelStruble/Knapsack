@@ -17,3 +17,6 @@ luac.out
 
 # Release files
 *.zip
+
+# Local helper scripts (they use this machine's WoW path)
+tools/
