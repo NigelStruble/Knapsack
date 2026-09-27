@@ -1,0 +1,17 @@
+<Bindings>
+	<Binding name="SATCHEL_BAGS" header="SATCHEL" category="ADDONS">
+		Satchel_ToggleBags()
+	</Binding>
+	<Binding name="SATCHEL_BANK" category="ADDONS">
+		Satchel_ToggleBank()
+	</Binding>
+	<Binding name="SATCHEL_MAIL" category="ADDONS">
+		Satchel_ToggleMail()
+	</Binding>
+	<Binding name="SATCHEL_GUILD" category="ADDONS">
+		Satchel_ToggleGuild()
+	</Binding>
+	<Binding name="SATCHEL_FIND" category="ADDONS">
+		Satchel_ToggleFind()
+	</Binding>
+</Bindings>
