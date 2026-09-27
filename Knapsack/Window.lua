@@ -32,7 +32,7 @@ local SEARCH_ICON = "Interface\\Common\\UI-Searchbox-Icon" -- where the client h
 
 local KINDS = {
 	bags = {
-		frameName = "SatchelBagsFrame",
+		frameName = "KnapsackBagsFrame",
 		title = L["Bags"],
 		columns = "columns",
 		anchor = "BOTTOMRIGHT",
@@ -40,7 +40,7 @@ local KINDS = {
 		y = 110,
 	},
 	bank = {
-		frameName = "SatchelBankFrame",
+		frameName = "KnapsackBankFrame",
 		title = L["Bank"],
 		columns = "bankColumns",
 		anchor = "TOPLEFT",
@@ -48,7 +48,7 @@ local KINDS = {
 		y = -110,
 	},
 	guild = {
-		frameName = "SatchelGuildFrame",
+		frameName = "KnapsackGuildFrame",
 		title = L["Guild Vault"],
 		columns = "bankColumns",
 		anchor = "TOPLEFT",
@@ -56,7 +56,7 @@ local KINDS = {
 		y = -150,
 	},
 	mail = {
-		frameName = "SatchelMailFrame",
+		frameName = "KnapsackMailFrame",
 		title = L["Mail"],
 		columns = "bankColumns",
 		anchor = "TOPLEFT",
@@ -65,7 +65,7 @@ local KINDS = {
 	},
 	-- Every character's items at once: typing searches them all.
 	find = {
-		frameName = "SatchelFindFrame",
+		frameName = "KnapsackFindFrame",
 		title = L["Find"],
 		columns = "bankColumns",
 		anchor = "TOPLEFT",
@@ -1086,7 +1086,7 @@ end
 
 -- Blizzard's broom (its "Clean Up Bags" button) is a whole button, frame and
 -- all, so it looks tiny at button size. Its frame is cropped off, so the
--- broom fills Satchel's button.
+-- broom fills Knapsack's button.
 local BROOM_CROP = 0.14
 
 local function Broom(texture)

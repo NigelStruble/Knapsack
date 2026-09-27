@@ -2,13 +2,13 @@ local ADDON, ns = ...
 local L, C, DB = ns.L, ns.C, ns.DB
 local Scanner, Tiles = ns.Scanner, ns.Tiles
 
--- Startup, opening and closing the windows, and the /satchel command.
+-- Startup, opening and closing the windows, and the /knapsack command.
 
 local _G = _G
 local ipairs, lower, format = ipairs, string.lower, string.format
 
 local function Print(message)
-	DEFAULT_CHAT_FRAME:AddMessage("|cff33ff99" .. L["Satchel"] .. "|r: " .. message)
+	DEFAULT_CHAT_FRAME:AddMessage("|cff33ff99" .. L["Knapsack"] .. "|r: " .. message)
 end
 ns.Print = Print
 
@@ -89,34 +89,34 @@ function ns.ToggleFind()
 end
 
 -- Key bindings (Bindings.xml) and the addon compartment on the minimap.
-_G.BINDING_HEADER_SATCHEL = L["Satchel"]
-_G.BINDING_NAME_SATCHEL_BAGS = L["Bags"]
-_G.BINDING_NAME_SATCHEL_BANK = L["Bank"]
-_G.BINDING_NAME_SATCHEL_MAIL = L["Mail"]
-_G.BINDING_NAME_SATCHEL_GUILD = L["Guild Vault"]
-_G.BINDING_NAME_SATCHEL_FIND = L["Find an item on all your characters"]
+_G.BINDING_HEADER_KNAPSACK = L["Knapsack"]
+_G.BINDING_NAME_KNAPSACK_BAGS = L["Bags"]
+_G.BINDING_NAME_KNAPSACK_BANK = L["Bank"]
+_G.BINDING_NAME_KNAPSACK_MAIL = L["Mail"]
+_G.BINDING_NAME_KNAPSACK_GUILD = L["Guild Vault"]
+_G.BINDING_NAME_KNAPSACK_FIND = L["Find an item on all your characters"]
 
-function _G.Satchel_ToggleBags()
+function _G.Knapsack_ToggleBags()
 	ns.ToggleBags()
 end
 
-function _G.Satchel_ToggleBank()
+function _G.Knapsack_ToggleBank()
 	ns.ToggleBank()
 end
 
-function _G.Satchel_ToggleGuild()
+function _G.Knapsack_ToggleGuild()
 	ns.ToggleGuild()
 end
 
-function _G.Satchel_ToggleMail()
+function _G.Knapsack_ToggleMail()
 	ns.ToggleMail()
 end
 
-function _G.Satchel_ToggleFind()
+function _G.Knapsack_ToggleFind()
 	ns.ToggleFind()
 end
 
-function _G.Satchel_OnAddonCompartmentClick(_, button)
+function _G.Knapsack_OnAddonCompartmentClick(_, button)
 	if button == "RightButton" then
 		ns.Options.Toggle()
 	else
@@ -124,15 +124,15 @@ function _G.Satchel_OnAddonCompartmentClick(_, button)
 	end
 end
 
-function _G.Satchel_OnAddonCompartmentEnter(_, frame)
+function _G.Knapsack_OnAddonCompartmentEnter(_, frame)
 	GameTooltip:SetOwner(frame, "ANCHOR_LEFT")
-	GameTooltip:SetText(L["Satchel"], 1, 1, 1)
+	GameTooltip:SetText(L["Knapsack"], 1, 1, 1)
 	GameTooltip:AddLine(L["Left-click: bags"], 0.8, 0.8, 0.8)
 	GameTooltip:AddLine(L["Right-click: options"], 0.8, 0.8, 0.8)
 	GameTooltip:Show()
 end
 
-function _G.Satchel_OnAddonCompartmentLeave()
+function _G.Knapsack_OnAddonCompartmentLeave()
 	GameTooltip:Hide()
 end
 
@@ -300,7 +300,7 @@ C.On("PLAYER_LOGIN", function()
 		C.ClearNewItems()
 		ns.Takeover.Closed()
 	end
-	-- Closing Satchel's bank window ends the visit, like closing Blizzard's.
+	-- Closing Knapsack's bank window ends the visit, like closing Blizzard's.
 	ns.bank.OnClosed = function(window)
 		window.autoOpened = nil
 		if ns.Takeover.bank and Scanner.BankOpen() then
@@ -320,17 +320,17 @@ C.On("PLAYER_LOGIN", function()
 	end)
 
 	if ns.Takeover.other then
-		Print(format(L["%s is handling your bags, so Satchel only records your bank, guild vault and characters. Type /satchel to see them."], ns.Takeover.other))
+		Print(format(L["%s is handling your bags, so Knapsack only records your bank, guild vault and characters. Type /knapsack to see them."], ns.Takeover.other))
 	end
 end)
 
 --------------------------------------------------------------------------------
--- /satchel
+-- /knapsack
 --------------------------------------------------------------------------------
 
--- /satchel charges: every item in the bags whose tooltip mentions charges,
+-- /knapsack charges: every item in the bags whose tooltip mentions charges,
 -- the tooltip line as the game gives it (escape codes shown), and the charges
--- Satchel reads from it. For reporting problems.
+-- Knapsack reads from it. For reporting problems.
 local function ShowCharges()
 	local found = 0
 	for _, bag in ipairs(C.BAGS) do
@@ -352,8 +352,8 @@ local function ShowCharges()
 	end
 end
 
-_G.SLASH_SATCHEL1 = "/satchel"
-_G.SlashCmdList.SATCHEL = function(message)
+_G.SLASH_KNAPSACK1 = "/knapsack"
+_G.SlashCmdList.KNAPSACK = function(message)
 	-- The first word is the command; the rest keeps its case (item names).
 	local word, rest = (message or ""):match("^%s*(%S*)%s*(.-)%s*$")
 	local command = lower(word or "")
@@ -378,15 +378,15 @@ _G.SlashCmdList.SATCHEL = function(message)
 		ns.Options.Toggle()
 	else
 		Print(L["commands:"])
-		Print("  /satchel - " .. L["bags"])
-		Print("  /satchel bank - " .. L["bank"])
-		Print("  /satchel mail - " .. L["mail"])
-		Print("  /satchel vault - " .. L["guild vault"])
-		Print("  /satchel find <name> - " .. L["find an item on all your characters"])
-		Print("  /satchel stack - " .. L["combine partial stacks in the bags"])
-		Print("  /satchel stack bank - " .. L["combine partial stacks in the bank, at the bank"])
-		Print("  /satchel fill - " .. L["fill partial stacks in the bags from the bank, at the bank"])
-		Print("  /satchel fill bank - " .. L["fill partial stacks in the bank from the bags, at the bank"])
-		Print("  /satchel options - " .. L["options"])
+		Print("  /knapsack - " .. L["bags"])
+		Print("  /knapsack bank - " .. L["bank"])
+		Print("  /knapsack mail - " .. L["mail"])
+		Print("  /knapsack vault - " .. L["guild vault"])
+		Print("  /knapsack find <name> - " .. L["find an item on all your characters"])
+		Print("  /knapsack stack - " .. L["combine partial stacks in the bags"])
+		Print("  /knapsack stack bank - " .. L["combine partial stacks in the bank, at the bank"])
+		Print("  /knapsack fill - " .. L["fill partial stacks in the bags from the bank, at the bank"])
+		Print("  /knapsack fill bank - " .. L["fill partial stacks in the bank from the bags, at the bank"])
+		Print("  /knapsack options - " .. L["options"])
 	end
 end

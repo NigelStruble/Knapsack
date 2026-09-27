@@ -1,23 +1,23 @@
 local _, ns = ...
 local C, DB = ns.C, ns.DB
 
--- Makes the game use Satchel's windows: the bag keys and bag bar buttons,
+-- Makes the game use Knapsack's windows: the bag keys and bag bar buttons,
 -- ToggleAllBags (which EllesmereUI's data bars and Broker plugins call), and
 -- the bags opening at a vendor, the bank or the mailbox. Blizzard's own bag
 -- and bank windows are moved into a hidden frame, never hidden or changed,
 -- which keeps their code (and the bank) working untainted.
 --
 -- If another bag addon is loaded (EllesmereUI Bags, Bagnon, ElvUI's bags, ...),
--- none of this happens: Satchel still records everything, and its windows open
--- with /satchel or a key binding instead.
+-- none of this happens: Knapsack still records everything, and its windows open
+-- with /knapsack or a key binding instead.
 
 local Takeover = {}
 ns.Takeover = Takeover
 
 local _G = _G
 
-Takeover.bags = false -- Satchel handles the game's bags
-Takeover.bank = false -- Satchel shows the bank instead of Blizzard's window
+Takeover.bags = false -- Knapsack handles the game's bags
+Takeover.bank = false -- Knapsack shows the bank instead of Blizzard's window
 Takeover.other = nil -- the other bag addon that handles them, by name
 
 local hidden = CreateFrame("Frame")

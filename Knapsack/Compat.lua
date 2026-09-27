@@ -1,7 +1,7 @@
 local _, ns = ...
 local L = ns.L
 
--- Thin wrappers around the WoW API. Satchel runs on the Retail engine (Retail
+-- Thin wrappers around the WoW API. Knapsack runs on the Retail engine (Retail
 -- itself, and WoW: Forever, which is Classic content on the Retail client) and
 -- on the Classic clients (Burning Crusade Classic Anniversary). The Classic
 -- clients have a bank of one container and bank bags instead of bank tabs, a
@@ -443,7 +443,7 @@ local function TooltipLines(getter, ...)
 	return nil
 end
 
-local SCAN = "SatchelScanTooltip"
+local SCAN = "KnapsackScanTooltip"
 local scanTip
 
 local function ScanLines(method, ...)
@@ -711,7 +711,7 @@ end
 -- Other bag addons
 --------------------------------------------------------------------------------
 
--- If one of these handles the bags, Satchel leaves them alone and only records
+-- If one of these handles the bags, Knapsack leaves them alone and only records
 -- and shows the bank, guild vault and other characters.
 local BAG_ADDONS = {
 	{ "EllesmereUIBags", "EllesmereUI Bags" },
@@ -724,6 +724,7 @@ local BAG_ADDONS = {
 	{ "Inventorian", "Inventorian" },
 	{ "LiteBag", "LiteBag" },
 	{ "Sorted", "Sorted" },
+	{ "Satchel", "Satchel" }, -- another bag addon for WoW: Forever (not this one)
 }
 
 local function AddOnLoaded(name)

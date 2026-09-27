@@ -1,4 +1,4 @@
-# Satchel
+# Knapsack
 
 A bag addon for WoW: Forever and Burning Crusade Classic Anniversary. Items
 are sorted into categories, all grey items go into a Junk category sorted by
@@ -36,7 +36,7 @@ characters' bags can be looked at from anywhere.
   stack while a mailbox's send page, a trade, the auction house, the bank or
   the guild vault is open, since those take one stack at a time.
 - **Charges on other characters' items.** The game only shows an item's
-  charges for your own bags, so Satchel records them, and other characters'
+  charges for your own bags, so Knapsack records them, and other characters'
   items show theirs in the tooltip.
 - **Combine stacks.** One click fills up partial stacks of the same item, so
   they take fewer slots, in the bags or, at the bank, in the bank. At the bank,
@@ -48,7 +48,7 @@ characters' bags can be looked at from anywhere.
 - **Everyone's gold.** Point at your gold in the bags to see every character's
   gold and the total.
 - **The bank from anywhere.** The bank is recorded each time you visit it. At
-  the bank, Satchel is the bank; anywhere else it shows the bank as it was,
+  the bank, Knapsack is the bank; anywhere else it shows the bank as it was,
   and how long ago that was.
 - **The mail from anywhere.** Each character's mailbox is recorded at the
   mailbox, and every item shows how long until it goes back to its sender (or
@@ -71,7 +71,7 @@ characters' bags can be looked at from anywhere.
   dragging, linking in chat, cooldowns and the glow on new items all behave as
   they do in the game's own bags, because the game's own item buttons do the
   work.
-- **EllesmereUI's skin.** If EllesmereUI is installed, Satchel uses its skin,
+- **EllesmereUI's skin.** If EllesmereUI is installed, Knapsack uses its skin,
   so the windows follow your EllesmereUI theme and accent color.
 
 ## Supported game versions
@@ -86,19 +86,19 @@ On Retail, the Warband bank is not shown.
 
 ## Installing
 
-1. Copy the `Satchel` folder into the game's AddOns folder, for example
-   `World of Warcraft\_classic_beta_\Interface\AddOns\Satchel` or
-   `World of Warcraft\_anniversary_\Interface\AddOns\Satchel`, and restart the
+1. Copy the `Knapsack` folder into the game's AddOns folder, for example
+   `World of Warcraft\_classic_beta_\Interface\AddOns\Knapsack` or
+   `World of Warcraft\_anniversary_\Interface\AddOns\Knapsack`, and restart the
    game (a new addon is only found at start-up, not by `/reload`).
 2. In the AddOns list, turn off any other bag addon, such as BetterBags,
    Bagnon, AdiBags or Baganator. If you use ElvUI, turn off its bags: ElvUI's
    options, **Bags**, **Enable**.
 
 That's all. The bag keys, the bag buttons, and anything else that opens the
-bags (such as data bars and broker plugins) now open Satchel.
+bags (such as data bars and broker plugins) now open Knapsack.
 
-If another bag addon is still on, Satchel leaves the bags to it and says so in
-chat. It still records your bank, guild vault and characters, and `/satchel`
+If another bag addon is still on, Knapsack leaves the bags to it and says so in
+chat. It still records your bank, guild vault and characters, and `/knapsack`
 opens its windows to look at them.
 
 ## Using it
@@ -145,7 +145,7 @@ opens its windows to look at them.
 
 ### The bank
 
-At a banker, Satchel's bank window opens next to your bags and is the bank:
+At a banker, Knapsack's bank window opens next to your bags and is the bank:
 right-click an item in the bank to take it out, right-click an item in your
 bags to put it in, or drag items between the two. Drop items on the bank's
 **Free** tile to put them in the bank.
@@ -159,9 +159,9 @@ window does. Right after the bank opens, its tabs can take a moment to arrive:
 the bank window says it is loading, and moving a category into the bank waits
 for it.
 
-Away from the bank, the **Bank** button (or `/satchel bank`) shows the bank as
+Away from the bank, the **Bank** button (or `/knapsack bank`) shows the bank as
 it was when you were last there. Other characters' banks are shown the same
-way, once they have visited a bank with Satchel on.
+way, once they have visited a bank with Knapsack on.
 
 On Anniversary the bank is its own 28 slots and up to seven bank bags, shown
 together like the bags. Items dropped on the **Free** tile go into the bank's
@@ -175,7 +175,7 @@ closing it does in the game.
 
 ### The mail
 
-The **Mail** button (or `/satchel mail`) shows what waits in a character's
+The **Mail** button (or `/knapsack mail`) shows what waits in a character's
 mailbox, sorted into categories like the bags, with the items that go back
 soonest first. The corner of each item shows the time left: red under a day,
 orange under three days. Its tooltip says who it is from, and whether it goes
@@ -209,7 +209,7 @@ match all of them:
 
 ### Finding an item
 
-The magnifier in the bags window (or `/satchel find linen`) opens **Find**.
+The magnifier in the bags window (or `/knapsack find linen`) opens **Find**.
 Type at least two letters of an item's name and it shows every place you have
 that item, one section per place: each character's bags, bank and mail, and
 each guild vault, starting with the character you are playing. The footer adds
@@ -217,14 +217,14 @@ them all up, and each item's tooltip says who has how many.
 
 ### The guild vault
 
-Open the guild vault once and Satchel records every tab you can see. It asks
+Open the guild vault once and Knapsack records every tab you can see. It asks
 the server for one tab after another, so leave the vault open for a few
 seconds. Tabs you cannot see are not recorded. The **Vault** button then shows
 the vault from anywhere, with the guild's gold and when it was recorded.
 
 ### Other characters
 
-Log in each character once with Satchel on, and visit a bank with it. After
+Log in each character once with Knapsack on, and visit a bank with it. After
 that, choose it at the top of the bags or bank window. Its items show their
 tooltips and can be shift-clicked into chat.
 
@@ -232,25 +232,25 @@ tooltips and can be shift-clicked into chat.
 
 | Command | Does |
 |---|---|
-| `/satchel` | Open or close the bags |
-| `/satchel bank` | Open or close the bank |
-| `/satchel mail` | Open or close the mail |
-| `/satchel vault` | Open or close the guild vault |
-| `/satchel find linen` | Find an item on all your characters |
-| `/satchel stack` | Combine partial stacks in the bags |
-| `/satchel stack bank` | Combine partial stacks in the bank (at the bank) |
-| `/satchel fill` | Fill partial stacks in the bags from the bank, then combine (at the bank) |
-| `/satchel fill bank` | Fill partial stacks in the bank from the bags, then combine (at the bank) |
-| `/satchel charges` | Show the charges line of each item in your bags as the game gives it, and the charges Satchel reads from it (for reporting problems) |
-| `/satchel options` | Open or close the options |
+| `/knapsack` | Open or close the bags |
+| `/knapsack bank` | Open or close the bank |
+| `/knapsack mail` | Open or close the mail |
+| `/knapsack vault` | Open or close the guild vault |
+| `/knapsack find linen` | Find an item on all your characters |
+| `/knapsack stack` | Combine partial stacks in the bags |
+| `/knapsack stack bank` | Combine partial stacks in the bank (at the bank) |
+| `/knapsack fill` | Fill partial stacks in the bags from the bank, then combine (at the bank) |
+| `/knapsack fill bank` | Fill partial stacks in the bank from the bags, then combine (at the bank) |
+| `/knapsack charges` | Show the charges line of each item in your bags as the game gives it, and the charges Knapsack reads from it (for reporting problems) |
+| `/knapsack options` | Open or close the options |
 
-Keys can be set in the game's key bindings, under **Satchel**. In the addon
+Keys can be set in the game's key bindings, under **Knapsack**. In the addon
 compartment by the minimap, left-click opens the bags and right-click the
 options.
 
 ## Options
 
-- **General:** whether Satchel replaces the bags and the bank (after a
+- **General:** whether Knapsack replaces the bags and the bank (after a
   `/reload`), items per row, item size, scale, whether small categories share
   a row, merging stacks, new items first, item levels, the BoE / BoU marks,
   red for items you cannot use, the width of the quality border (in screen
@@ -267,8 +267,8 @@ options.
 ## Development
 
 ```
-Satchel/
-  Satchel.toc     Interface numbers and load order
+Knapsack/
+  Knapsack.toc     Interface numbers and load order
   Bindings.xml    Key bindings
   Locales.lua     Strings (English; other languages can be added here)
   Compat.lua      Game version, API wrappers, events
@@ -287,10 +287,10 @@ Satchel/
   Tiles.lua       Item tiles, and Blizzard's item buttons over them
   BagBar.lua      The bag slots under the bags (and on Anniversary the bank)
   Window.lua      The bags, bank, mail and guild vault windows
-  Takeover.lua    Making the game open Satchel instead of its own bags
+  Takeover.lua    Making the game open Knapsack instead of its own bags
   Tooltip.lua     Counts per character in item tooltips
   Options.lua     The options window
-  Core.lua        Startup and /satchel
+  Core.lua        Startup and /knapsack
 tests/            Tests run against a mock of the WoW API
 ```
 
@@ -307,9 +307,9 @@ makes it an Anniversary client (a bank of one container and bank bags, a
 keyring, no `C_TooltipInfo`, `OnTooltipSetItem`), which the "Classic:" tests
 use.
 
-While developing, you can link the `Satchel` folder into the game's AddOns
+While developing, you can link the `Knapsack` folder into the game's AddOns
 folder (a directory junction or symbolic link) instead of copying it, so
 changes show up after a `/reload`.
 
 When a patch changes the interface number, add the new number to the
-`## Interface:` line in `Satchel.toc`.
+`## Interface:` line in `Knapsack.toc`.

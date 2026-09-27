@@ -1,15 +1,15 @@
 ## Interface: 16001, 20506, 120100, 120105
-## Title: Satchel
+## Title: Knapsack
 ## Notes: Bags sorted into categories, with junk sorted by vendor value, and your bank, mail, guild vault and other characters viewable from anywhere.
 ## Author: Vedek
 ## Version: 1.0.0
 ## Category: Inventory
-## SavedVariables: SatchelDB
+## SavedVariables: KnapsackDB
 ## OptionalDeps: EllesmereUI, ElvUI
 ## IconTexture: Interface\Icons\INV_Misc_Bag_08
-## AddonCompartmentFunc: Satchel_OnAddonCompartmentClick
-## AddonCompartmentFuncOnEnter: Satchel_OnAddonCompartmentEnter
-## AddonCompartmentFuncOnLeave: Satchel_OnAddonCompartmentLeave
+## AddonCompartmentFunc: Knapsack_OnAddonCompartmentClick
+## AddonCompartmentFuncOnEnter: Knapsack_OnAddonCompartmentEnter
+## AddonCompartmentFuncOnLeave: Knapsack_OnAddonCompartmentLeave
 
 Locales.lua
 Compat.lua

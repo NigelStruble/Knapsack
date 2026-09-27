@@ -2,7 +2,7 @@ local _, ns = ...
 local L, C, DB, W = ns.L, ns.C, ns.DB, ns.W
 local Categories = ns.Categories
 
--- The options window: General, Categories and Characters. /satchel options, the
+-- The options window: General, Categories and Characters. /knapsack options, the
 -- cog in the bags window, or the game's AddOns options open it.
 
 local Options = {}
@@ -87,13 +87,13 @@ local function TakeoverText()
 	local takeover = ns.Takeover
 	if takeover.other then
 		-- ElvUI stays; only its bags are turned off.
-		local how = takeover.other == "ElvUI" and L["Turn off Bags in ElvUI's options to use Satchel's bags."]
-			or format(L["Turn %s off in the AddOns list to use Satchel's bags."], takeover.other)
-		return format(L["%s is handling your bags, so Satchel only records your bank, guild vault and characters."], takeover.other) .. " " .. how
+		local how = takeover.other == "ElvUI" and L["Turn off Bags in ElvUI's options to use Knapsack's bags."]
+			or format(L["Turn %s off in the AddOns list to use Knapsack's bags."], takeover.other)
+		return format(L["%s is handling your bags, so Knapsack only records your bank, guild vault and characters."], takeover.other) .. " " .. how
 	end
 	local parts = {}
-	parts[#parts + 1] = takeover.bags and L["Satchel is your bags."] or L["Satchel is not replacing the bags."]
-	parts[#parts + 1] = takeover.bank and L["Satchel is your bank."] or L["The game's bank window is used at the bank."]
+	parts[#parts + 1] = takeover.bags and L["Knapsack is your bags."] or L["Knapsack is not replacing the bags."]
+	parts[#parts + 1] = takeover.bank and L["Knapsack is your bank."] or L["The game's bank window is used at the bank."]
 	parts[#parts + 1] = L["Changes to these two take effect after /reload."]
 	return table.concat(parts, " ")
 end
@@ -101,10 +101,10 @@ end
 local function BuildGeneral(page)
 	local left = NewColumn(page, 16, -8)
 	left:Add(W.Header(page, L["Windows"], 300))
-	left:Add(W.Checkbox(page, L["Use Satchel for the bags"], Get("replaceBags"), Set("replaceBags"),
-		L["Satchel opens with the bag keys, the bag buttons, at vendors, and from anything else that opens the bags, such as data bars. Takes effect after /reload."]))
-	left:Add(W.Checkbox(page, L["Use Satchel for the bank"], Get("replaceBank"), Set("replaceBank"),
-		L["At the bank, Satchel shows the bank instead of the game's bank window. Takes effect after /reload."]))
+	left:Add(W.Checkbox(page, L["Use Knapsack for the bags"], Get("replaceBags"), Set("replaceBags"),
+		L["Knapsack opens with the bag keys, the bag buttons, at vendors, and from anything else that opens the bags, such as data bars. Takes effect after /reload."]))
+	left:Add(W.Checkbox(page, L["Use Knapsack for the bank"], Get("replaceBank"), Set("replaceBank"),
+		L["At the bank, Knapsack shows the bank instead of the game's bank window. Takes effect after /reload."]))
 	takeoverNote = left:Add(W.Note(page, TakeoverText(), 300))
 	left:Skip(6)
 	left:Add(W.Header(page, L["Layout"], 300))
@@ -454,7 +454,7 @@ function Options:RefreshCharacters()
 end
 
 local function BuildCharacters(page)
-	local note = W.Note(page, L["Characters and guild vaults Satchel has recorded. Forget the ones you no longer play; a character comes back the next time you log in with it."], 620)
+	local note = W.Note(page, L["Characters and guild vaults Knapsack has recorded. Forget the ones you no longer play; a character comes back the next time you log in with it."], 620)
 	note:SetPoint("TOPLEFT", 16, -8)
 	local top = -40
 	-- Surnames exist on Forever only.
@@ -479,8 +479,8 @@ end
 local TAB_KEYS = { "general", "categories", "characters" }
 
 function Options:Build()
-	local version = C.AddOnMetadata("Satchel", "Version")
-	window = W.Window("SatchelOptionsFrame", L["Satchel"] .. (version and ("  |cff808080" .. version .. "|r") or ""), WIDTH, HEIGHT)
+	local version = C.AddOnMetadata("Knapsack", "Version")
+	window = W.Window("KnapsackOptionsFrame", L["Knapsack"] .. (version and ("  |cff808080" .. version .. "|r") or ""), WIDTH, HEIGHT)
 	for i = 1, #TAB_KEYS do
 		local page = CreateFrame("Frame", nil, window)
 		page:SetPoint("TOPLEFT", 0, -66)
@@ -552,16 +552,16 @@ end
 -- A page in the game's own AddOns options that opens the window.
 function Options.Register()
 	local panel = CreateFrame("Frame")
-	panel.name = L["Satchel"]
+	panel.name = L["Knapsack"]
 	local title = panel:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
 	title:SetPoint("TOPLEFT", 16, -16)
-	title:SetText(L["Satchel"])
+	title:SetText(L["Knapsack"])
 	local text = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
 	text:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -10)
 	text:SetWidth(520)
 	text:SetJustifyH("LEFT")
-	text:SetText(L["The settings are in their own window. You can also open it by typing /satchel options."])
-	local open = W.Button(panel, L["Open the Satchel options"], 220, 26, function()
+	text:SetText(L["The settings are in their own window. You can also open it by typing /knapsack options."])
+	local open = W.Button(panel, L["Open the Knapsack options"], 220, 26, function()
 		if not InCombatLockdown() then
 			if _G.SettingsPanel and _G.SettingsPanel:IsShown() then
 				HideUIPanel(_G.SettingsPanel)
@@ -570,5 +570,5 @@ function Options.Register()
 		Options.Open()
 	end)
 	open:SetPoint("TOPLEFT", text, "BOTTOMLEFT", 0, -16)
-	C.RegisterOptionsPanel(panel, L["Satchel"])
+	C.RegisterOptionsPanel(panel, L["Knapsack"])
 end

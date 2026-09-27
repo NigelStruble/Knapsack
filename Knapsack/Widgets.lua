@@ -451,7 +451,7 @@ local function RenderMenu()
 end
 
 local function CreateMenu()
-	menu = CreateFrame("Frame", "SatchelDropDownMenu", UIParent)
+	menu = CreateFrame("Frame", "KnapsackDropDownMenu", UIParent)
 	menu:SetFrameStrata("FULLSCREEN_DIALOG")
 	menu:SetClampedToScreen(true)
 	menu:EnableMouse(true)
@@ -818,7 +818,7 @@ end
 function W.Confirm(text, onAccept)
 	local dialog = W.confirmDialog
 	if not dialog then
-		dialog = CreateFrame("Frame", "SatchelConfirmDialog", UIParent)
+		dialog = CreateFrame("Frame", "KnapsackConfirmDialog", UIParent)
 		dialog:SetSize(340, 120)
 		dialog:SetPoint("CENTER", 0, 140)
 		dialog:SetFrameStrata("FULLSCREEN_DIALOG")
@@ -842,7 +842,7 @@ function W.Confirm(text, onAccept)
 			dialog:Hide()
 		end)
 		dialog.no:SetPoint("BOTTOMLEFT", dialog, "BOTTOM", 6, 14)
-		_G.tinsert(_G.UISpecialFrames, "SatchelConfirmDialog")
+		_G.tinsert(_G.UISpecialFrames, "KnapsackConfirmDialog")
 		W.confirmDialog = dialog
 	end
 	dialog.text:SetText(text)

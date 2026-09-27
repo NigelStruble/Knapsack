@@ -1,4 +1,4 @@
--- A mock of the World of Warcraft API, enough to load Satchel and drive it
+-- A mock of the World of Warcraft API, enough to load Knapsack and drive it
 -- from tests: the Retail engine (Retail and Forever) by default, or with
 -- options.classic a Classic client (Burning Crusade Classic Anniversary): a
 -- bank of one container and bank bags, a keyring, no C_TooltipInfo (tooltips
@@ -1019,7 +1019,7 @@ function Mock.New(options)
 		frame:Hide()
 	end
 
-	-- Blizzard's bag functions, which Satchel hooks.
+	-- Blizzard's bag functions, which Knapsack hooks.
 	for _, name in ipairs({ "ToggleAllBags", "ToggleBackpack", "ToggleBag", "OpenBackpack", "OpenAllBags", "CloseAllBags" }) do
 		env[name] = function()
 			state.blizzard[name] = (state.blizzard[name] or 0) + 1

@@ -5,7 +5,7 @@ local L, C, DB = ns.L, ns.C, ns.DB
 -- vault, holds to item tooltips:
 --   Vedek        25 (bags 20, bank 3, mail 2)
 --   Knights      40 (guild vault)
--- and, for items shown in Satchel's windows, the charges and mail details the
+-- and, for items shown in Knapsack's windows, the charges and mail details the
 -- game's own tooltip leaves out.
 
 local Tooltip = {}
@@ -250,7 +250,7 @@ function Tooltip.Start()
 
 	local function Extend(tooltip, itemID)
 		if tooltip ~= _G.GameTooltip and tooltip ~= _G.ItemRefTooltip then
-			return -- not Satchel's own scanning tooltip, nor anyone else's
+			return -- not Knapsack's own scanning tooltip, nor anyone else's
 		end
 		pcall(AddCharges, tooltip)
 		pcall(AddMail, tooltip)

@@ -3,7 +3,7 @@ local W = ns.W
 
 -- Matches EllesmereUI's look through its skinning API (SKINNING_API.md in the
 -- EllesmereUI folder). Without EllesmereUI, or with its third-party skinning
--- turned off for Satchel, nothing here runs and the flat default look stays.
+-- turned off for Knapsack, nothing here runs and the flat default look stays.
 
 local Skin = {}
 ns.Skin = Skin

@@ -15,7 +15,7 @@ local L, C, W, DB = ns.L, ns.C, ns.W, ns.DB
 --   * are only ever created out of combat (one per bag slot, kept for good),
 --   * get their bag from their parent's ID and their slot from their own ID,
 --     both set once when they are created,
---   * are never written into: everything Satchel tracks about them lives in
+--   * are never written into: everything Knapsack tracks about them lives in
 --     the tables in this file.
 -- Tiles for other characters, snapshots and the guild vault show the item's
 -- tooltip themselves and handle shift-click (link) and control-click (try on).

@@ -1,11 +1,11 @@
--- Runs Satchel against the mock client in tests/mock_wow.lua.
+-- Runs Knapsack against the mock client in tests/mock_wow.lua.
 -- Usage, from the repository root:  lua5.1 tests/run_tests.lua
 
 package.path = "tests/?.lua;" .. package.path
 local Mock = require("mock_wow")
 
-local ADDON_DIR = "Satchel"
-local ADDON = "Satchel"
+local ADDON_DIR = "Knapsack"
+local ADDON = "Knapsack"
 local passed, failed = 0, 0
 local current
 
@@ -68,7 +68,7 @@ local function Start(setup, options)
 	if setup then
 		setup(env, state)
 	end
-	env.SatchelDB = state.saved
+	env.KnapsackDB = state.saved
 	local ns = Mock.LoadAddon(env, state, ADDON_DIR, ADDON)
 	Mock.Fire(state, "ADDON_LOADED", ADDON)
 	Mock.Fire(state, "PLAYER_LOGIN")
@@ -210,7 +210,7 @@ test("a vendor opens and closes the bags, but not bags the player opened", funct
 	NoErrors(client)
 end)
 
-test("another bag addon: Satchel only records", function()
+test("another bag addon: Knapsack only records", function()
 	local client = Start(function(_, state)
 		state.loadedAddons.EllesmereUIBags = true
 	end)
@@ -219,13 +219,22 @@ test("another bag addon: Satchel only records", function()
 	equal(ns.Takeover.other, "EllesmereUI Bags", "names the other addon")
 	env.ToggleAllBags()
 	equal(client.state.blizzard.ToggleAllBags, 1, "the game's own toggle still runs")
-	check(not ns.bags:IsShown(), "Satchel stays closed")
+	check(not ns.bags:IsShown(), "Knapsack stays closed")
 	check(client.state.chat[1] and client.state.chat[1]:find("EllesmereUI Bags", 1, true), "says why in chat")
-	env.SlashCmdList.SATCHEL("")
-	check(ns.bags:IsShown(), "/satchel opens it")
+	env.SlashCmdList.KNAPSACK("")
+	check(ns.bags:IsShown(), "/knapsack opens it")
 	Mock.Fire(client.state, "BAG_UPDATE", 0)
 	Mock.Advance(client.state, 1)
-	check(env.SatchelDB.characters["Vedek-Doomhowl"].bags[0], "bags still recorded")
+	check(env.KnapsackDB.characters["Vedek-Doomhowl"].bags[0], "bags still recorded")
+	NoErrors(client)
+end)
+
+test("the other bag addon named Satchel is another bag addon", function()
+	local client = Start(function(_, state)
+		state.loadedAddons.Satchel = true
+	end)
+	check(not client.ns.Takeover.bags, "not taken over")
+	equal(client.ns.Takeover.other, "Satchel", "names it")
 	NoErrors(client)
 end)
 
@@ -449,7 +458,7 @@ test("the bags are recorded for other characters to see", function()
 	state.containers[1].items[2] = { id = 4306, count = 3 }
 	Mock.Fire(state, "BAG_UPDATE", 1)
 	Mock.Advance(state, 0.5)
-	local char = env.SatchelDB.characters["Vedek-Doomhowl"]
+	local char = env.KnapsackDB.characters["Vedek-Doomhowl"]
 	equal(char.class, "PRIEST", "class")
 	equal(char.money, 123456, "money")
 	local item = char.bags[1].items[2]
@@ -513,7 +522,7 @@ test("the bank is recorded at the bank and shown live there", function()
 	end)
 	local state, env, ns = client.state, client.env, client.ns
 	VisitBank(client)
-	local char = env.SatchelDB.characters["Vedek-Doomhowl"]
+	local char = env.KnapsackDB.characters["Vedek-Doomhowl"]
 	check(char.bank and char.bank[6] and char.bank[7], "both tabs recorded")
 	equal(char.bank[6].name, "Tab One", "tab name")
 	check(ns.bank:IsShown(), "bank window opened")
@@ -550,7 +559,7 @@ test("bank buttons only for slots in use, plus a drop target", function()
 	NoErrors(client)
 end)
 
-test("closing Satchel's bank window ends the visit", function()
+test("closing Knapsack's bank window ends the visit", function()
 	local client = Start(function(_, state)
 		Bank(state)
 	end)
@@ -572,7 +581,7 @@ test("the bank from anywhere, and never recorded away from it", function()
 	state.containers[6].items[1] = nil -- the client forgets once away
 	Mock.Fire(state, "BAG_UPDATE", 6)
 	Mock.Advance(state, 1)
-	check(env.SatchelDB.characters["Vedek-Doomhowl"].bank[6].items[1], "snapshot kept")
+	check(env.KnapsackDB.characters["Vedek-Doomhowl"].bank[6].items[1], "snapshot kept")
 	state.time = state.time + 3600
 	ns.ToggleBank()
 	check(ns.bank:IsShown(), "opens away from the bank")
@@ -606,8 +615,8 @@ test("without the bank takeover the game's bank window is used", function()
 	check(not ns.Takeover.bank, "not taken over")
 	equal(env.BankFrame:GetParent(), env.UIParent, "Blizzard's bank left alone")
 	VisitBank(client)
-	check(not ns.bank:IsShown(), "Satchel's bank stays closed")
-	check(env.SatchelDB.characters["Vedek-Doomhowl"].bank[6], "but it is recorded")
+	check(not ns.bank:IsShown(), "Knapsack's bank stays closed")
+	check(env.KnapsackDB.characters["Vedek-Doomhowl"].bank[6], "but it is recorded")
 	NoErrors(client)
 end)
 
@@ -654,13 +663,13 @@ test("every tab of the guild vault it can see is recorded", function()
 	equal(state.guildQueries[2], 3, "then the next viewable tab, skipping Officers")
 	Serve(client)
 	Mock.Advance(state, 3)
-	local guild = env.SatchelDB.guilds["Knights-Doomhowl"]
+	local guild = env.KnapsackDB.guilds["Knights-Doomhowl"]
 	check(guild, "recorded")
 	equal(guild.money, 9876543, "money")
 	equal(guild.tabs[1].items[14].count, 20, "tab 1")
 	equal(guild.tabs[3].items[2].count, 20, "tab 3")
 	check(not guild.tabs[2].items, "not the tab it cannot see")
-	equal(env.SatchelDB.characters["Vedek-Doomhowl"].guild, "Knights-Doomhowl", "the character's guild")
+	equal(env.KnapsackDB.characters["Vedek-Doomhowl"].guild, "Knights-Doomhowl", "the character's guild")
 
 	ns.ToggleGuild()
 	local window = ns.guild
@@ -687,7 +696,7 @@ test("an empty read right after asking keeps the old tab", function()
 	-- An answer arrives, but it was for something else: tab 1 is not loaded.
 	Mock.Fire(state, "GUILDBANKBAGSLOTS_CHANGED")
 	Mock.Advance(state, 0.5)
-	local tab = env.SatchelDB.guilds["Knights-Doomhowl"].tabs[1]
+	local tab = env.KnapsackDB.guilds["Knights-Doomhowl"].tabs[1]
 	equal(tab.items[1] and tab.items[1].count, 100, "old snapshot kept")
 	NoErrors(client)
 end)
@@ -810,8 +819,8 @@ test("the options window works", function()
 	end)
 	local ns = client.ns
 	ns.Options.Open("categories")
-	check(_G.SatchelOptionsFrame == nil, "no globals leak into the test runner")
-	local frame = client.env.SatchelOptionsFrame
+	check(_G.KnapsackOptionsFrame == nil, "no globals leak into the test runner")
+	local frame = client.env.KnapsackOptionsFrame
 	check(frame and frame:IsShown(), "open")
 	local key = ns.Categories.AddCustom("Test", { class = 7 })
 	ns.Options:RefreshCategories()
@@ -832,7 +841,7 @@ test("EllesmereUI's skin is used when it is there", function()
 			end,
 		}
 	end)
-	equal(calls.name, "Satchel", "registered")
+	equal(calls.name, "Knapsack", "registered")
 	local shells, boxes = 0, 0
 	calls.callback({
 		Shell = function()
@@ -922,7 +931,7 @@ end)
 test("logging out keeps the recorded bags and gold", function()
 	local client = Start()
 	local state, env = client.state, client.env
-	local char = env.SatchelDB.characters["Vedek-Doomhowl"]
+	local char = env.KnapsackDB.characters["Vedek-Doomhowl"]
 	check(char.bags[0] and char.bags[0].items[1], "recorded while playing")
 	-- On the way out the client empties the bags and the gold.
 	Mock.Fire(state, "PLAYER_LEAVING_WORLD")
@@ -955,7 +964,7 @@ test("bags not loaded yet do not replace the recorded ones", function()
 		state.containers = {} -- the client has not sent the bags yet
 	end)
 	local state = client.state
-	local char = client.env.SatchelDB.characters["Vedek-Doomhowl"]
+	local char = client.env.KnapsackDB.characters["Vedek-Doomhowl"]
 	check(char.bags[0] and char.bags[0].items[1], "last session's bags kept at login")
 	StandardBags(state)
 	Mock.Fire(state, "BAG_UPDATE", 0)
@@ -975,7 +984,7 @@ test("the whole window can be dragged, and the header has room for it", function
 	local width = bags.searchBox:GetWidth()
 	check(width >= 60 and width <= 180, "the search box leaves room: " .. width)
 	Mock.CallScript(bags, "OnDragStop")
-	check(client.env.SatchelDB.positions.SatchelBagsFrame, "the new position is kept")
+	check(client.env.KnapsackDB.positions.KnapsackBagsFrame, "the new position is kept")
 	check(bags.combineButton:IsShown(), "combine stacks, for the player's bags")
 	bags:SetOwner("Aria-Doomhowl")
 	check(not bags.combineButton:IsShown(), "not for other characters")
@@ -1105,7 +1114,7 @@ test("merged items with charges use the one with the fewest left", function()
 	Mock.Advance(state, 1)
 	button = ns.Tiles.Secure.Attached(TileFor(bags, 20749))
 	equal(button:GetID(), 3, "still the one with the fewest")
-	equal(env.SatchelDB.characters["Vedek-Doomhowl"].bags[1].items[3].charges, 1, "recorded after the cast")
+	equal(env.KnapsackDB.characters["Vedek-Doomhowl"].bags[1].items[3].charges, 1, "recorded after the cast")
 	state.containers[1].items[3] = nil
 	Mock.Fire(state, "BAG_UPDATE", 1)
 	Mock.Advance(state, 1)
@@ -1124,7 +1133,7 @@ test("other characters' items show their recorded charges", function()
 		items[5] = { link = Mock.Link(20749), count = 1, quality = 1 } -- recorded before charges were
 	end)
 	local state, env = client.state, client.env
-	equal(env.SatchelDB.characters["Vedek-Doomhowl"].bags[1].items[2].charges, 3, "charges are recorded")
+	equal(env.KnapsackDB.characters["Vedek-Doomhowl"].bags[1].items[2].charges, 3, "charges are recorded")
 	local bags = OpenBags(client)
 	bags:SetOwner("Aria-Doomhowl")
 	Mock.Enter(state, TileFor(bags, 20749))
@@ -1396,13 +1405,13 @@ test("charges are read once the item has loaded", function()
 		state.containers[1].items[2] = { id = 20749, charges = 3 }
 	end)
 	local state, env = client.state, client.env
-	local saved = env.SatchelDB.characters["Vedek-Doomhowl"].bags[1].items[2]
+	local saved = env.KnapsackDB.characters["Vedek-Doomhowl"].bags[1].items[2]
 	equal(saved.charges, nil, "not before")
 	check(state.requested[20749], "the item was asked for")
 	state.unloaded[20749] = nil
 	Mock.Fire(state, "GET_ITEM_INFO_RECEIVED", 20749, true)
 	Mock.Advance(state, 1)
-	saved = env.SatchelDB.characters["Vedek-Doomhowl"].bags[1].items[2]
+	saved = env.KnapsackDB.characters["Vedek-Doomhowl"].bags[1].items[2]
 	equal(saved.charges, 3, "recorded once it has loaded")
 	NoErrors(client)
 end)
@@ -1427,18 +1436,18 @@ test("an item the server does not have is not asked for again and again", functi
 	NoErrors(client)
 end)
 
-test("/satchel charges shows what the game gives and what is read from it", function()
+test("/knapsack charges shows what the game gives and what is read from it", function()
 	local client = Start(function(_, state)
 		state.containers[1].items[2] = { id = 20749, charges = 4 }
 	end)
 	local state = client.state
-	client.env.SlashCmdList.SATCHEL("charges")
+	client.env.SlashCmdList.KNAPSACK("charges")
 	local line = state.chat[#state.chat]
 	check(line:find("1/2", 1, true), "the slot: " .. line)
 	check(line:find("||4Charge:Charges;", 1, true), "the line as given, escape codes shown: " .. line)
 	check(line:find("= 4", 1, true), "what is read: " .. line)
 	client.state.containers[1].items[2] = nil
-	client.env.SlashCmdList.SATCHEL("charges")
+	client.env.SlashCmdList.KNAPSACK("charges")
 	check(state.chat[#state.chat]:find("No item", 1, true), "says when there is none")
 	NoErrors(client)
 end)
@@ -1457,7 +1466,7 @@ test("a category of Bind on Equip items that are not bound yet", function()
 	local bags = OpenBags(client)
 	equal(Names(Section(bags, boe).records), "Green Sword of the Monkey, Thick Plate Helm", "the unbound Bind on Equip gear")
 	equal(Names(Section(bags, "equipment").records), "Green Sword of the Monkey", "the bound sword stays with the rest")
-	equal(client.env.SatchelDB.characters["Vedek-Doomhowl"].bags[1].items[4].bound, true, "soulbound is recorded")
+	equal(client.env.KnapsackDB.characters["Vedek-Doomhowl"].bags[1].items[4].bound, true, "soulbound is recorded")
 	-- The other binding choices are rules too.
 	ns.Categories.SetRules(boe, { bind = "bound" })
 	Mock.Advance(client.state, 0.2)
@@ -1481,7 +1490,7 @@ test("Find searches every character, the mail and the guild vaults", function()
 		WithGuild(state)
 	end)
 	local state, env, ns = client.state, client.env, client.ns
-	env.SlashCmdList.SATCHEL("find Linen")
+	env.SlashCmdList.KNAPSACK("find Linen")
 	Mock.Advance(state, 0.5)
 	local find = ns.find
 	check(find:IsShown(), "the Find window")
@@ -1674,7 +1683,7 @@ test("a bank still loading is waited for, and not recorded empty", function()
 	state.bankLoading = true -- the tabs arrive a moment after the bank opens
 	VisitBank(client)
 	check(ns.bank.message:IsShown() and ns.bank.message:GetText():find("loading", 1, true), "the bank says it is loading")
-	check(env.SatchelDB.characters["Vedek-Doomhowl"].bank[6].items[1], "the recorded bank is kept meanwhile")
+	check(env.KnapsackDB.characters["Vedek-Doomhowl"].bank[6].items[1], "the recorded bank is kept meanwhile")
 	local entry = MenuEntry(client, ns.bags, "tradegoods", "Put all in the bank")
 	entry.callback()
 	Mock.Advance(state, 1)
@@ -1688,7 +1697,7 @@ test("a bank still loading is waited for, and not recorded empty", function()
 	NoErrors(client)
 end)
 
-test("a new character's free first bank tab is unlocked from Satchel", function()
+test("a new character's free first bank tab is unlocked from Knapsack", function()
 	local client = Start() -- no bank tab yet
 	local state, env, ns = client.state, client.env, client.ns
 	VisitBank(client)
@@ -1767,7 +1776,7 @@ test("mail a whole category to one of your characters", function()
 	end
 	check(aria, "to Aria")
 	aria.callback()
-	local dialog = env.SatchelConfirmDialog
+	local dialog = env.KnapsackConfirmDialog
 	check(dialog:IsShown() and dialog.text:GetText():find("Mail 14 items", 1, true), "asks first: " .. tostring(dialog.text:GetText()))
 	Mock.Click(dialog.yes)
 	Mock.Advance(state, 1)
@@ -1781,7 +1790,7 @@ test("mail a whole category to one of your characters", function()
 	Mock.DeliverMail(state)
 	Mock.Advance(state, 1)
 	check(state.chat[#state.chat]:find("Mailed 14 items to Aria", 1, true), "says so: " .. state.chat[#state.chat])
-	local mails = env.SatchelDB.characters["Aria-Doomhowl"].mail.mails
+	local mails = env.KnapsackDB.characters["Aria-Doomhowl"].mail.mails
 	equal(#mails, 2, "both in her mail")
 	check(state.containers[1].items[15], "the soulbound cloth stayed")
 	NoErrors(client)
@@ -1806,7 +1815,7 @@ test("the bag slots show the bags worn, and change them", function()
 	local height = bags:GetHeight()
 	Mock.Click(bags.bagToggle)
 	check(bags.bagBar:IsShown(), "shown")
-	equal(env.SatchelDB.settings.bagBar, true, "remembered")
+	equal(env.KnapsackDB.settings.bagBar, true, "remembered")
 	check(bags:GetHeight() > height, "the window makes room for them")
 	local slots = bags.bagBar.slots
 	equal(slots[1].bag, 0, "the backpack first")
@@ -1881,7 +1890,7 @@ test("the mailbox is recorded, with when each item goes back", function()
 		{ sender = "Aria", subject = "Pay me", cod = 20000, daysLeft = 2.5, items = { { id = 20749, charges = 2 } } },
 	})
 	Mock.Fire(state, "MAIL_CLOSED")
-	local mail = env.SatchelDB.characters["Vedek-Doomhowl"].mail
+	local mail = env.KnapsackDB.characters["Vedek-Doomhowl"].mail
 	check(mail and #mail.mails == 4, "four mails")
 	equal(mail.mails[4].items[1].charges, 2, "charges of mailed items too")
 
@@ -1919,7 +1928,7 @@ test("a mailbox closed at once is still recorded", function()
 	Mock.Fire(state, "MAIL_SHOW")
 	Mock.Fire(state, "MAIL_INBOX_UPDATE")
 	Mock.Fire(state, "MAIL_CLOSED")
-	local mail = env.SatchelDB.characters["Vedek-Doomhowl"].mail
+	local mail = env.KnapsackDB.characters["Vedek-Doomhowl"].mail
 	check(mail and #mail.mails == 1, "recorded as it closed")
 	Mock.Advance(state, 1)
 	NoErrors(client)
@@ -1931,7 +1940,7 @@ test("the mailbox is not recorded away from it", function()
 	state.mailbox = { { sender = "Aria", subject = "Hi", items = { { id = 2589 } } } }
 	Mock.Fire(state, "MAIL_INBOX_UPDATE")
 	Mock.Advance(state, 0.5)
-	equal(env.SatchelDB.characters["Vedek-Doomhowl"].mail, nil, "nothing recorded")
+	equal(env.KnapsackDB.characters["Vedek-Doomhowl"].mail, nil, "nothing recorded")
 	client.ns.ToggleMail()
 	check(client.ns.mail.message:IsShown(), "says so")
 	NoErrors(client)
@@ -1946,7 +1955,7 @@ test("mail sent to another of your characters is in its mailbox at once", functi
 	env.SendMail("aria", "Oil for you", "")
 	Mock.Fire(state, "MAIL_SEND_SUCCESS")
 	Mock.Advance(state, 0.2)
-	local mails = env.SatchelDB.characters["Aria-Doomhowl"].mail.mails
+	local mails = env.KnapsackDB.characters["Aria-Doomhowl"].mail.mails
 	equal(#mails, 1, "in her mailbox")
 	equal(mails[1].sender, "Vedek", "from me")
 	equal(mails[1].items[1].charges, 3, "with the oil's charges")
@@ -1964,7 +1973,7 @@ test("mail sent to another of your characters is in its mailbox at once", functi
 	env.SendMail("Aria-Doomhowl", "Again", "")
 	Mock.Fire(state, "MAIL_FAILED")
 	Mock.Fire(state, "MAIL_SEND_SUCCESS")
-	equal(#env.SatchelDB.characters["Aria-Doomhowl"].mail.mails, 1, "nothing else delivered")
+	equal(#env.KnapsackDB.characters["Aria-Doomhowl"].mail.mails, 1, "nothing else delivered")
 	equal(#state.sentMail, 3, "the game's own SendMail still ran")
 	NoErrors(client)
 end)
@@ -1980,7 +1989,7 @@ test("Forever surnames: mail to \"First Last\" reaches your character", function
 		}
 	end)
 	local state, env = client.state, client.env
-	local chars = env.SatchelDB.characters
+	local chars = env.KnapsackDB.characters
 	equal(client.ns.DB.PlayerKey(), "Vedek Md-Doomhowl", "recorded as First Last")
 	equal(chars["Vedek Md-Doomhowl"].surname, "Md", "my surname is recorded")
 	check(chars["Vedek Md-Doomhowl"].bags[0], "with my bags")
@@ -2019,7 +2028,7 @@ test("a record from before surnames moves to First Last", function()
 			},
 		}
 	end)
-	local chars = client.env.SatchelDB.characters
+	local chars = client.env.KnapsackDB.characters
 	equal(chars["Vedek-Doomhowl"], nil, "the old record is gone")
 	local char = chars["Vedek Md-Doomhowl"]
 	check(char and char.bank and char.bank[6], "its bank moved with it")
@@ -2030,7 +2039,7 @@ test("a record from before surnames moves to First Last", function()
 		state.player.surname = "Md"
 		state.saved = { characters = { ["Vedek-Doomhowl"] = { name = "Vedek", surname = "Smith" } } }
 	end)
-	chars = client.env.SatchelDB.characters
+	chars = client.env.KnapsackDB.characters
 	check(chars["Vedek-Doomhowl"], "Vedek Smith's record is left alone")
 	check(chars["Vedek Md-Doomhowl"], "Vedek Md has his own")
 	NoErrors(client)
@@ -2077,10 +2086,10 @@ test("characters with the same first name are kept apart and named in full", fun
 	state.sendMail = { items = { [1] = { id = 2589, count = 1 } } }
 	env.SendMail("Vedek", "Which one?", "")
 	Mock.Fire(state, "MAIL_SEND_SUCCESS")
-	equal(env.SatchelDB.characters["Vedek Smith-Doomhowl"].mail, nil, "not recorded for a guess")
+	equal(env.KnapsackDB.characters["Vedek Smith-Doomhowl"].mail, nil, "not recorded for a guess")
 	env.SendMail("Vedek Smith", "For you", "")
 	Mock.Fire(state, "MAIL_SEND_SUCCESS")
-	local mail = env.SatchelDB.characters["Vedek Smith-Doomhowl"].mail
+	local mail = env.KnapsackDB.characters["Vedek Smith-Doomhowl"].mail
 	check(mail and #mail.mails == 1 and mail.mails[1].sender == "Vedek Md", "Vedek Md's mail to Vedek Smith")
 	NoErrors(client)
 end)
@@ -2091,7 +2100,7 @@ test("the dropdown highlight does not hide the names", function()
 	end)
 	local bags = OpenBags(client)
 	Mock.Click(bags.owner.button)
-	local menu = client.env.SatchelDropDownMenu
+	local menu = client.env.KnapsackDropDownMenu
 	check(menu and menu:IsShown(), "the list opened")
 	local highlight = menu.buttons[1].highlight
 	check(highlight.__color[4] < 0.5, "only a tint over the name and check mark")
@@ -2137,7 +2146,7 @@ test("returning a mail from one of your characters puts it in theirs", function(
 	env.ReturnInboxItem(1)
 	env.ReturnInboxItem(2) -- mail that came back cannot go back again
 	Mock.Advance(state, 0.2)
-	local mails = env.SatchelDB.characters["Aria-Doomhowl"].mail.mails
+	local mails = env.KnapsackDB.characters["Aria-Doomhowl"].mail.mails
 	equal(#mails, 1, "back in her mailbox")
 	equal(mails[1].sender, "Vedek", "from me")
 	check(mails[1].returned and not mails[1].returns, "deleted when it expires")
@@ -2195,7 +2204,7 @@ test("Classic: loads cleanly and takes over the bags and bank", function()
 	equal(#state.tooltipCalls, 0, "TooltipDataProcessor not relied on")
 	check((state.secureButtons or 0) >= 16 + 16 + 20 + 32, "item buttons for every bag slot, the keyring's too")
 	equal(ns.bank.unlockButton, nil, "no bank tab to unlock")
-	-- The keyring button opens and closes Satchel's bags, once a press.
+	-- The keyring button opens and closes Knapsack's bags, once a press.
 	state.time = state.time + 1
 	env.ToggleKeyRing()
 	check(ns.bags:IsShown(), "the keyring button opens the bags")
@@ -2228,12 +2237,12 @@ test("Classic: keys on the keyring are in Keys; its free slots are not free spac
 	check(text:find("Vedek | 1 (bags 1)", 1, true), "and who has it\n" .. text)
 	local lines = ns.C.BagTooltip(-2, 1)
 	check(lines and lines[1].leftText == "Key to Searing Gorge", "its tooltip lines can be read, for charges")
-	local char = env.SatchelDB.characters["Vedek-Doomhowl"]
+	local char = env.KnapsackDB.characters["Vedek-Doomhowl"]
 	check(char.bags[-2] and char.bags[-2].family == 256, "recorded, as the keyring")
 	NoErrors(client)
 end)
 
-test("Classic: with ElvUI's bags on Satchel only records; with them off it takes over", function()
+test("Classic: with ElvUI's bags on Knapsack only records; with them off it takes over", function()
 	local client = StartClassic(function(env)
 		env.ElvUI = { { private = { bags = { enable = true } } } }
 	end)
@@ -2267,7 +2276,7 @@ test("Classic: no keyring where the game has it turned off", function()
 	for _, entry in ipairs(Section(bags, "free").free) do
 		check(entry.family ~= 256, "no keyring space")
 	end
-	equal(client.env.SatchelDB.characters["Vedek-Doomhowl"].bags[-2], nil, "nothing recorded for it")
+	equal(client.env.KnapsackDB.characters["Vedek-Doomhowl"].bags[-2], nil, "nothing recorded for it")
 	NoErrors(client)
 end)
 
@@ -2279,7 +2288,7 @@ test("Classic: the bank's own slots and bank bags, recorded and shown", function
 	local state, env, ns = client.state, client.env, client.ns
 	VisitClassicBank(client)
 	check(ns.bank:IsShown() and ns.bags:IsShown(), "the bank window opened, and the bags")
-	local char = env.SatchelDB.characters["Vedek-Doomhowl"]
+	local char = env.KnapsackDB.characters["Vedek-Doomhowl"]
 	check(char.bank and char.bank[-1] and char.bank[5], "the bank's own slots and the bank bag recorded")
 	check(char.bank[5].link and char.bank[5].link:find("Linen Bag", 1, true), "the bank bag itself")
 	equal(char.bankBagSlots, 2, "bank bag slots bought")
@@ -2298,7 +2307,7 @@ test("Classic: the bank's own slots and bank bags, recorded and shown", function
 	local text = Plain(env.GameTooltip:Text())
 	check(text:find("Silk Cloth", 1, true) and text:find("Vedek | 20 (bank 20)", 1, true), "tooltip with counts\n" .. text)
 	Mock.Leave(state, button)
-	-- Closing Satchel's bank window ends the visit.
+	-- Closing Knapsack's bank window ends the visit.
 	ns.bank:Hide()
 	equal(state.closedBank, 1, "CloseBankFrame")
 	LeaveClassicBank(client)
@@ -2321,13 +2330,13 @@ test("Classic: charges and unusable items are read from the game's tooltip lines
 	local oil = TileFor(bags, 20749)
 	check(oil and oil.record.stacks and #oil.record.stacks == 2, "one tile for both oils")
 	equal(oil and oil.record.charges, 3, "the one with the fewest charges is used first")
-	local items = env.SatchelDB.characters["Vedek-Doomhowl"].bags[1].items
+	local items = env.KnapsackDB.characters["Vedek-Doomhowl"].bags[1].items
 	equal(items[2].charges, 5, "recorded")
 	equal(items[3].charges, 3, "both")
 	check(TileFor(bags, 10205).record.unusable, "plate: red on the right")
 	check(TileFor(bags, 13446).record.unusable, "a potion above the character's level: a red line")
 	check(not TileFor(bags, 12345).record.unusable, "not for red durability or disenchant lines")
-	check(env.SatchelScanTooltip and not env.SatchelScanTooltip:IsShown(), "read with a hidden tooltip")
+	check(env.KnapsackScanTooltip and not env.KnapsackScanTooltip:IsShown(), "read with a hidden tooltip")
 	NoErrors(client)
 end)
 
@@ -2388,14 +2397,14 @@ test("Classic: combine stacks in the bank's own slots and bank bags", function()
 	NoErrors(client)
 end)
 
-test("Classic: /satchel fill bank fills the bank's own slots and bank bags from the bags", function()
+test("Classic: /knapsack fill bank fills the bank's own slots and bank bags from the bags", function()
 	local client = StartClassic(function(_, state)
 		ClassicBank(state) -- Elemental Water 5 in the bank's own slots, Sharp Claw 2 in the bank bag
 		state.containers[1].items[2] = { id = 7070, count = 10 }
 	end)
 	local state, env = client.state, client.env
 	VisitClassicBank(client)
-	env.SlashCmdList.SATCHEL("fill bank")
+	env.SlashCmdList.KNAPSACK("fill bank")
 	Settle(client)
 	equal(state.containers[-1].items[2].count, 15, "the water in the bank's own slots")
 	equal(state.containers[1].items[2], nil, "all of the bags' water went")
@@ -2444,7 +2453,7 @@ test("Classic: the bank's bag slots change bank bags and buy more", function()
 	check(text:find("costs 10g 0s 0c", 1, true), "what the next one costs\n" .. text)
 	Mock.Leave(state, slots[6])
 	Mock.Click(slots[6])
-	local dialog = env.SatchelConfirmDialog
+	local dialog = env.KnapsackConfirmDialog
 	check(dialog and dialog:IsShown() and dialog.text:GetText():find("10g 0s 0c", 1, true), "asks first")
 	Mock.Click(dialog.yes)
 	Mock.Advance(state, 1)
@@ -2465,7 +2474,7 @@ test("Classic: the bank's bag slots change bank bags and buy more", function()
 	check(not dialog:IsShown(), "nothing to buy away from the bank")
 	Mock.Click(bank.bagToggle)
 	check(not bank.bagBar:IsShown(), "hidden with its button")
-	equal(env.SatchelDB.settings.bankBar, false, "remembered")
+	equal(env.KnapsackDB.settings.bankBar, false, "remembered")
 	NoErrors(client)
 end)
 
@@ -2496,7 +2505,7 @@ test("Classic: the mailbox is read through the game's tooltip lines too", functi
 		{ sender = "Aria", subject = "Oil", daysLeft = 10, items = { { id = 20749, charges = 2 } } },
 	})
 	Mock.Fire(client.state, "MAIL_CLOSED")
-	local mail = client.env.SatchelDB.characters["Vedek-Doomhowl"].mail
+	local mail = client.env.KnapsackDB.characters["Vedek-Doomhowl"].mail
 	equal(mail and mail.mails[1].items[1].charges, 2, "charges of mailed items")
 	NoErrors(client)
 end)

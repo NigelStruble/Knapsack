@@ -1,0 +1,17 @@
+<Bindings>
+	<Binding name="KNAPSACK_BAGS" header="KNAPSACK" category="ADDONS">
+		Knapsack_ToggleBags()
+	</Binding>
+	<Binding name="KNAPSACK_BANK" category="ADDONS">
+		Knapsack_ToggleBank()
+	</Binding>
+	<Binding name="KNAPSACK_MAIL" category="ADDONS">
+		Knapsack_ToggleMail()
+	</Binding>
+	<Binding name="KNAPSACK_GUILD" category="ADDONS">
+		Knapsack_ToggleGuild()
+	</Binding>
+	<Binding name="KNAPSACK_FIND" category="ADDONS">
+		Knapsack_ToggleFind()
+	</Binding>
+</Bindings>

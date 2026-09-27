@@ -1,7 +1,7 @@
 local _, ns = ...
 local C = ns.C
 
--- Everything is saved account-wide in SatchelDB:
+-- Everything is saved account-wide in KnapsackDB:
 --   settings    options; only changed values are saved (see DEFAULTS)
 --   categories  order, hidden and renamed categories, custom categories and
 --               items dragged into a category (see Categories.lua)
@@ -18,7 +18,7 @@ local pairs, ipairs, type, select, rawset, sort, lower = pairs, ipairs, type, se
 
 DB.DEFAULTS = {
 	replaceBags = true, -- take over the game's bags
-	replaceBank = true, -- show the bank in Satchel instead of Blizzard's window
+	replaceBank = true, -- show the bank in Knapsack instead of Blizzard's window
 	columns = 12, -- items per row in the bags window
 	bankColumns = 14, -- items per row in the bank and guild vault windows
 	tileSize = 36,
@@ -41,15 +41,15 @@ DB.DEFAULTS = {
 
 local VERSION = 1
 
--- Until SatchelDB loads, everything reads empty tables and the defaults.
+-- Until KnapsackDB loads, everything reads empty tables and the defaults.
 DB.settings = setmetatable({}, { __index = DB.DEFAULTS })
 DB.categories, DB.characters, DB.guilds, DB.positions = {}, {}, {}, {}
 
 function DB.Load()
-	local saved = _G.SatchelDB
+	local saved = _G.KnapsackDB
 	if type(saved) ~= "table" then
 		saved = {}
-		_G.SatchelDB = saved
+		_G.KnapsackDB = saved
 	end
 	saved.version = saved.version or VERSION
 	for _, key in ipairs({ "settings", "categories", "characters", "guilds", "positions" }) do
