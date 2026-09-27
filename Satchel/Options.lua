@@ -102,7 +102,7 @@ local function BuildGeneral(page)
 	local left = NewColumn(page, 16, -8)
 	left:Add(W.Header(page, L["Windows"], 300))
 	left:Add(W.Checkbox(page, L["Use Satchel for the bags"], Get("replaceBags"), Set("replaceBags"),
-		L["Satchel opens with the bag keys, the bag buttons and at vendors, and EllesmereUI's data bars open it. Takes effect after /reload."]))
+		L["Satchel opens with the bag keys, the bag buttons, at vendors, and from anything else that opens the bags, such as data bars. Takes effect after /reload."]))
 	left:Add(W.Checkbox(page, L["Use Satchel for the bank"], Get("replaceBank"), Set("replaceBank"),
 		L["At the bank, Satchel shows the bank instead of the game's bank window. Takes effect after /reload."]))
 	takeoverNote = left:Add(W.Note(page, TakeoverText(), 300))

@@ -1,10 +1,9 @@
 # Satchel
 
-A bag addon for WoW: Forever, made to take the place of EllesmereUI's bags and
-look like the rest of EllesmereUI. It also runs on Burning Crusade Classic
-Anniversary. Items are sorted into categories, all grey items go into a Junk
-category sorted by vendor value, and the bank, the mail, the guild vault and
-your other characters' bags can be looked at from anywhere.
+A bag addon for WoW: Forever and Burning Crusade Classic Anniversary. Items
+are sorted into categories, all grey items go into a Junk category sorted by
+vendor value, and the bank, the mail, the guild vault and your other
+characters' bags can be looked at from anywhere.
 
 ## Features
 
@@ -33,10 +32,9 @@ your other characters' bags can be looked at from anywhere.
   even when different players made them. Using a merged tile uses the
   smallest stack first, and for items with charges (such as Wizard Oil) the
   one with the fewest charges left; its tooltip lists the charges of each.
-  Gear always shows piece by piece, and
-  everything in your bags shows stack by stack while a mailbox's send page, a
-  trade, the auction house, the bank or the guild vault is open, since those
-  take one stack at a time.
+  Gear always shows piece by piece, and everything in your bags shows stack by
+  stack while a mailbox's send page, a trade, the auction house, the bank or
+  the guild vault is open, since those take one stack at a time.
 - **Charges on other characters' items.** The game only shows an item's
   charges for your own bags, so Satchel records them, and other characters'
   items show theirs in the tooltip.
@@ -72,31 +70,36 @@ your other characters' bags can be looked at from anywhere.
 - **Works like the default bags.** Using, selling, depositing, splitting stacks,
   dragging, linking in chat, cooldowns and the glow on new items all behave as
   they do in the game's own bags, because the game's own item buttons do the
-  work (see [How it works](#how-it-works)).
-- **EllesmereUI's look.** With EllesmereUI installed, Satchel uses its skinning
-  API, so the windows follow your EllesmereUI theme and accent color.
+  work.
+- **EllesmereUI's skin.** If EllesmereUI is installed, Satchel uses its skin,
+  so the windows follow your EllesmereUI theme and accent color.
 
-## Setting it up with EllesmereUI
+## Supported game versions
 
-1. In the AddOns list, turn off **EllesmereUI Bags** and turn on **Satchel**.
-2. That's all. The bag keys, the bag buttons, the Gold block on EllesmereUI's
-   data bars and the Bag Space broker plugin all open Satchel now.
+| Game | Folder | Interface |
+|---|---|---|
+| WoW: Forever | `_classic_beta_` (beta) | 16001 |
+| Burning Crusade Classic Anniversary | `_anniversary_` | 20506 |
+| Retail (Midnight) | `_retail_` | 120100, 120105 |
 
-If EllesmereUI Bags (or another bag addon, such as BetterBags, Bagnon or
-ElvUI's bags) is still on, Satchel leaves the bags to it and says so in chat.
-It still records your bank, guild vault and characters, and `/satchel` opens
-its windows to look at them.
+On Retail, the Warband bank is not shown.
 
-## Setting it up on Burning Crusade Classic Anniversary
+## Installing
 
-1. Copy the `Satchel` folder into `_anniversary_\Interface\AddOns` and restart
-   the game (a new addon is only found at start-up, not by `/reload`).
-2. In the AddOns list, turn off **BetterBags** (or any other bag addon) for the
-   characters that should use Satchel.
-3. If ElvUI's bags are on for a character, turn them off: ElvUI's options,
-   **Bags**, **Enable**.
+1. Copy the `Satchel` folder into the game's AddOns folder, for example
+   `World of Warcraft\_classic_beta_\Interface\AddOns\Satchel` or
+   `World of Warcraft\_anniversary_\Interface\AddOns\Satchel`, and restart the
+   game (a new addon is only found at start-up, not by `/reload`).
+2. In the AddOns list, turn off any other bag addon, such as BetterBags,
+   Bagnon, AdiBags or Baganator. If you use ElvUI, turn off its bags: ElvUI's
+   options, **Bags**, **Enable**.
 
-Satchel does not take ElvUI's look; its windows keep their own dark style.
+That's all. The bag keys, the bag buttons, and anything else that opens the
+bags (such as data bars and broker plugins) now open Satchel.
+
+If another bag addon is still on, Satchel leaves the bags to it and says so in
+chat. It still records your bank, guild vault and characters, and `/satchel`
+opens its windows to look at them.
 
 ## Using it
 
@@ -132,8 +135,8 @@ Satchel does not take ElvUI's look; its windows keep their own dark style.
 - **New:** items you just got sit at the top until you close the bags, even
   after you have looked at them.
 - **Bottom:** the bag slots button, used and total slots (quivers, soul bags,
-  profession bags and the keyring are not counted, like ElvUI's Bags datatext)
-  and your gold. Point at the gold for every character's gold.
+  profession bags and the keyring are not counted) and your gold. Point at the
+  gold for every character's gold.
 - **Bag slots:** the backpack button at the bottom left shows your bag slots
   under the items. Drop a bag on a slot to wear it there, drag a bag off its
   slot to move or remove it, or click a slot with an item held to put the item
@@ -261,107 +264,6 @@ options.
   Forever, **Show surnames** shows your characters' first and last names
   everywhere; characters that share a first name always show both.
 
-## Supported game versions
-
-| Game | Folder | Interface |
-|---|---|---|
-| WoW: Forever | `_classic_beta_` (beta) | 16001 |
-| Burning Crusade Classic Anniversary | `_anniversary_` | 20506 |
-| Retail (Midnight) | `_retail_` | 120100, 120105 |
-
-Forever and Retail run the Retail engine, which Satchel was built for. On
-Retail, the Warband bank is not shown. Anniversary is a Classic client; what
-it does differently is in [How it works](#how-it-works).
-
-## Installing
-
-Copy the `Satchel` folder into the game's AddOns folder, for example
-`World of Warcraft\_classic_beta_\Interface\AddOns\Satchel` or
-`World of Warcraft\_anniversary_\Interface\AddOns\Satchel`.
-
-While developing, you can link the folder instead, so changes show up after a
-`/reload`:
-
-```powershell
-.\tools\link-addon.ps1
-.\tools\link-addon.ps1 -Flavors _classic_beta_, _anniversary_
-.\tools\link-addon.ps1 -Flavors _classic_beta_ -Remove
-```
-
-## How it works
-
-- **Taking over the bags.** Blizzard's bag windows are moved into a hidden
-  frame (never hidden or changed), `ToggleAllBags` is replaced, and the
-  functions that open and close bags at vendors and the bank are hooked. At the
-  bank, Blizzard's bank window is moved out of sight the same way, and must
-  stay "shown": depositing asks it which bank is open.
-- **Item buttons.** Each item is drawn by Satchel, with one of Blizzard's own
-  container item buttons (`ContainerFrameItemButtonTemplate`) lying over it,
-  invisible. All clicks run Blizzard's code, untainted. Those buttons are only
-  created out of combat, one per bag slot, get their bag from their parent's
-  ID and their slot from their own, and nothing is ever written into them.
-  They are hidden with the frame's own `SetAlpha`: the template's
-  `ItemButtonMixin:SetAlpha` only fades the icon and count, and would leave
-  the slot frame and a blue glow over the item.
-- **Records.** Everything is saved account-wide in `SatchelDB`: the bags and
-  bank of each character by "Name-Realm", and each guild vault by
-  "Guild-Realm". A bank is only ever recorded at the bank, because anywhere
-  else the game does not know what is in it. Nothing is recorded between
-  leaving the world and entering it again: while logging out the game has
-  already emptied the bags and set the gold to 0.
-- **Items you cannot use and items with charges** are found in the item's
-  tooltip data (`C_TooltipInfo`), without showing a tooltip: red lines for
-  what you lack, and the "5 Charges" line. Charges are only in the tooltip of
-  the item in its bag slot, not a link's, so they are read with the bags and
-  recorded with them, and read again after you cast the spell of an item with
-  charges. Tooltip data can hold text as the game keeps it before drawing
-  (color codes, `5 |4Charge:Charges;`), so it is turned into the drawn text
-  before it is read. Clients without `C_TooltipInfo` (Anniversary) fill a
-  hidden tooltip instead and read its lines.
-- **Anniversary** is a Classic client, and differs from the Retail engine in a
-  few ways Satchel follows:
-  - the bank is container -1 (the bank's own slots) and bank bags 5 to 11,
-    not bank tabs; the bank's own slots use Blizzard's
-    `BankItemButtonGenericTemplate`, and the bank opens with
-    `BANKFRAME_OPENED`;
-  - the client's `Enum.BagIndex` is Retail's and wrong there: its
-    `BankBag_N` are one too high (`BankBag_1` is 6), and it lists a
-    `ReagentBag` (5) that Classic does not have. Satchel counts the bank bags
-    from `NUM_BAG_SLOTS`, as ElvUI does, and ignores the reagent bag;
-  - the keyring is container -2, sized by `GetKeyRingSize`; the game gives no
-    family for it, so Satchel treats it as a bag for keys only;
-  - the bank's own slots and the keyring's are inventory slots to a tooltip
-    (`BankButtonIDToInvSlotID`, `KeyRingButtonIDToInvSlotID`), as in
-    Blizzard's own bank and keyring;
-  - `TooltipDataProcessor` exists but does not work, so the counts are added
-    to tooltips through `OnTooltipSetItem`, as ElvUI does there;
-  - bank bag slots are bought with `PurchaseSlot`, after Satchel's own
-    question; the Retail engine's bank tab unlocking is not there.
-- **Merging** groups items by their link without the maker's GUID, which
-  the game puts in the links of crafted items that do not stack.
-- **Mail** is read at the mailbox on `MAIL_INBOX_UPDATE`. `SendMail` and
-  `ReturnInboxItem` are hooked (after the game's own code runs): a mail to one
-  of your characters is noted when it is sent and added to that character's
-  mail on `MAIL_SEND_SUCCESS`. Mail not collected in time is shown back in
-  its sender's mailbox when the sender is one of your characters, until that
-  character's mailbox is read again.
-- **Surnames.** On Forever, characters have surnames, which `UnitName` gives
-  as its second value, and mail uses both names ("Vedek Md"). Characters can
-  share a first name, so on Forever each character is recorded as "First
-  Last-Realm"; a record from before that ("First-Realm") moves over the first
-  time the character logs in. A character's surname is also learned from mail
-  sent to it, so mail to "Vedex", "Vedex Vicious" or "Vedex Vicious-Realm"
-  reaches your Vedex before it has logged in again. A first name alone only
-  counts when just one of your characters has it.
-- **Combining stacks** uses the game's own pick-up and put-down, as if by
-  hand, in rounds: the smallest stack of an item goes onto the largest, and
-  the next round waits for the server. It stops in combat or if you pick
-  something up. Filling from the other side comes first, in the same way: the
-  fullest partial stack takes the other side's smallest stack (split off when
-  only part of it fits), until nothing more fits or is left. Soulbound and
-  unbound stacks of an item are kept apart, as the game will not put them
-  together.
-
 ## Development
 
 ```
@@ -381,7 +283,7 @@ Satchel/
   Stack.lua       Combining partial stacks
   Widgets.lua     Flat controls, shared with Missing Buffs
   Transfer.lua    Moving a whole category into the bank, out of it, or by mail
-  Skin.lua        EllesmereUI's skinning API
+  Skin.lua        EllesmereUI's skin, when it is installed
   Tiles.lua       Item tiles, and Blizzard's item buttons over them
   BagBar.lua      The bag slots under the bags (and on Anniversary the bank)
   Window.lua      The bags, bank, mail and guild vault windows
@@ -405,6 +307,15 @@ happens. It plays the Retail engine by default; `Mock.New({ classic = true })`
 makes it an Anniversary client (a bank of one container and bank bags, a
 keyring, no `C_TooltipInfo`, `OnTooltipSetItem`), which the "Classic:" tests
 use.
+
+While developing, you can link the folder into the game instead of copying it,
+so changes show up after a `/reload`:
+
+```powershell
+.\tools\link-addon.ps1
+.\tools\link-addon.ps1 -Flavors _classic_beta_, _anniversary_
+.\tools\link-addon.ps1 -Flavors _classic_beta_ -Remove
+```
 
 When a patch changes the interface number, add the new number to the
 `## Interface:` line in `Satchel.toc`.
