@@ -225,21 +225,40 @@ local function Listen()
 	for _, what in ipairs({ "items", "categories", "characters", "guilds", "guildChanged" }) do
 		ns.Listen(what, RefreshAll)
 	end
+	-- A change of settings or categories, or item data arriving (which can
+	-- change an item's category or place in it), lays the windows out afresh,
+	-- gaps left by items that have gone included (see Window.lua: keeping
+	-- places).
 	ns.Listen("settings", function()
 		for _, window in ipairs(Windows()) do
+			window:ForgetPlaces()
 			window:ApplyScale()
 			window:QueueRefresh()
 		end
 	end)
+	for _, what in ipairs({ "categories", "items" }) do
+		ns.Listen(what, function()
+			for _, window in ipairs(Windows()) do
+				window:ForgetPlaces()
+			end
+		end)
+	end
 	-- Stacks merge again, or come apart, as a mailbox, trade, auction house,
 	-- bank or guild vault opens and closes.
 	ns.Listen("panels", function()
 		ns.bags:QueueRefresh()
 		ns.bank:QueueRefresh()
 	end)
+	-- The broom tidies up: once it is done, the bags and bank are laid out
+	-- afresh.
 	ns.Listen("stacking", function()
+		local running = ns.Stack.Running()
 		for _, window in ipairs({ ns.bags, ns.bank }) do
-			window.combineButton:SetActive(not ns.Stack.Running())
+			window.combineButton:SetActive(not running)
+			if not running then
+				window:ForgetPlaces()
+				window:QueueRefresh()
+			end
 		end
 	end)
 	-- Borders are sized in screen pixels.

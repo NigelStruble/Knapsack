@@ -284,6 +284,147 @@ local function FreeSection(free, live)
 	return { key = "free", title = L["Free"], free = entries }
 end
 
+--------------------------------------------------------------------------------
+-- Keeping places
+--------------------------------------------------------------------------------
+
+-- While the bags (or the bank, at the bank) stay open, items keep their
+-- places: an item that leaves (sold, deposited, used up) leaves a gap, so the
+-- rest do not shift under the mouse, and an item that comes in goes at the end
+-- of its category, never into a gap, where a quick click could take it.
+-- Closing the window lays it out afresh, as do the broom and changing the
+-- settings, the categories or whose items are shown. (BetterBags' "Preserve
+-- Empty Slots as Gaps" works the same way.)
+
+local VACANT = { gap = true } -- the place of an item that has gone
+
+-- What an entry is, and where: one tile per item when stacks are merged.
+local function Hash(rec)
+	return rec.mergeKey or MergeKey(rec)
+end
+
+local function Spot(rec)
+	return rec.stacks and "merged" or rec.position
+end
+
+-- One section's records in the places they had (entries, as remembered by
+-- KeepPlaces): the same item in the same place first, then the same item
+-- moved to another slot; gaps for what has gone, and anything new at the end.
+local function KeepSection(entries, records)
+	local byHash = {}
+	for _, rec in ipairs(records) do
+		local hash = Hash(rec)
+		local list = byHash[hash]
+		if not list then
+			list = {}
+			byHash[hash] = list
+		end
+		list[#list + 1] = rec
+	end
+	local placed, used = {}, {}
+	for pass = 1, 2 do
+		for i, entry in ipairs(entries) do
+			if entry.hash and not placed[i] then
+				for _, rec in ipairs(byHash[entry.hash] or {}) do
+					if not used[rec] and (pass == 2 or Spot(rec) == entry.spot) then
+						placed[i], used[rec] = rec, true
+						break
+					end
+				end
+			end
+		end
+	end
+	local result = {}
+	for i = 1, #entries do
+		result[i] = placed[i] or VACANT
+	end
+	for _, rec in ipairs(records) do
+		if not used[rec] then
+			result[#result + 1] = rec
+		end
+	end
+	return result
+end
+
+-- Puts the model's live items in the places they had at the last refresh,
+-- and remembers the places for the next one.
+function prototype:KeepPlaces(model)
+	local sections = model.sections
+	if not (DB.settings.keepPlaces and model.live and sections and (self.kind == "bags" or self.kind == "bank")) then
+		self.places = nil
+		return
+	end
+	-- Merged tiles and single stacks do not match up: a change between them
+	-- (a mailbox or the bank opening) starts afresh.
+	local sig = tostring(self.ownerKey) .. "|" .. tostring(Merging(true))
+	local places = self.places
+	if places and places.sig == sig then
+		local fresh, free = {}, nil
+		for _, section in ipairs(sections) do
+			if section.free then
+				free = section
+			else
+				fresh[section.key] = section
+			end
+		end
+		-- The sections there were, in their order, with new ones where they go.
+		local order, kept = {}, {}
+		for _, remembered in ipairs(places.sections) do
+			order[#order + 1] = remembered.key
+			kept[remembered.key] = remembered
+		end
+		local at = 0
+		for _, section in ipairs(sections) do
+			if not section.free then
+				local found
+				for i, key in ipairs(order) do
+					if key == section.key then
+						found = i
+						break
+					end
+				end
+				if found then
+					at = found
+				else
+					at = at + 1
+					table.insert(order, at, section.key)
+				end
+			end
+		end
+		local result = {}
+		for _, key in ipairs(order) do
+			local remembered, section = kept[key], fresh[key]
+			if not section then
+				-- Everything in it has gone: its places stay, empty.
+				section = { key = key, title = remembered.title, category = remembered.category, records = {} }
+			end
+			if remembered then
+				section.records = KeepSection(remembered.entries, section.records)
+			end
+			result[#result + 1] = section
+		end
+		result[#result + 1] = free
+		model.sections = result
+		sections = result
+	end
+	local remembered = {}
+	for _, section in ipairs(sections) do
+		if not section.free then
+			local entries = {}
+			for i, rec in ipairs(section.records) do
+				entries[i] = rec.gap and {} or { hash = Hash(rec), spot = Spot(rec) }
+			end
+			remembered[#remembered + 1] = { key = section.key, title = section.title, category = section.category, entries = entries }
+		end
+	end
+	self.places = { sig = sig, sections = remembered }
+end
+
+-- The next refresh lays the window out afresh.
+function prototype:ForgetPlaces()
+	self.places = nil
+end
+
 local function CharacterName(key)
 	local char = DB.Character(key)
 	if not char then
@@ -620,7 +761,12 @@ function prototype:AcquireTitle(section)
 			count = count + entry.count
 		end
 	else
-		count = #section.records
+		count = 0
+		for _, rec in ipairs(section.records) do
+			if not rec.gap then
+				count = count + 1
+			end
+		end
 	end
 	local text = section.title .. "  |cff808080" .. count .. "|r"
 	if section.money and section.money > 0 then
@@ -684,6 +830,8 @@ function prototype:Draw(model)
 			local tile = Tiles.Acquire(content, level)
 			if section.free then
 				Tiles.SetFree(tile, item, size)
+			elseif item.gap then
+				Tiles.SetGap(tile, size)
 			else
 				Tiles.Set(tile, item, size)
 			end
@@ -833,7 +981,9 @@ function prototype:Refresh()
 	end
 	self.dirty = false
 	self:UpdateHeader()
-	self:Draw(self:BuildModel())
+	local model = self:BuildModel()
+	self:KeepPlaces(model)
+	self:Draw(model)
 end
 
 --------------------------------------------------------------------------------
@@ -918,6 +1068,11 @@ end
 -- of header to drag it by.
 function prototype:LayoutHeader()
 	local header = self.header
+	-- The window's name is as wide as its text, in whatever font the skin gave it.
+	local label = self.titleLabel
+	if label then
+		label:SetWidth(ceil(label.text:GetStringWidth()) + 6)
+	end
 	local left = PAD
 	for _, widget in ipairs(self.leftWidgets) do
 		if widget:IsShown() then
@@ -1179,6 +1334,20 @@ function Window.Create(kind)
 		frame.owner:Hide()
 		frame.leftWidgets = {}
 	end
+
+	-- The bank, mail, guild vault and Find windows would look alike, so their
+	-- header names them, after the character menu ("Vedek  Bank"). The bags
+	-- have their Bank, Mail and Vault buttons instead. Not mouse-enabled: the
+	-- header drags through it.
+	if kind ~= "bags" then
+		local label = CreateFrame("Frame", nil, header)
+		label:SetHeight(22)
+		label.text = label:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+		label.text:SetPoint("LEFT", 2, 0)
+		label.text:SetText(spec.title)
+		frame.titleLabel = label
+		frame.leftWidgets[#frame.leftWidgets + 1] = label
+	end
 	local function AddButton(button, onRight)
 		local list = onRight and frame.rightWidgets or frame.leftWidgets
 		list[#list + 1] = button
@@ -1329,6 +1498,7 @@ function Window.Create(kind)
 	end)
 	frame:SetScript("OnHide", function(self)
 		self.recent = {}
+		self:ForgetPlaces()
 		if self.OnClosed then
 			self:OnClosed()
 		end
@@ -1356,6 +1526,10 @@ function Window.Create(kind)
 		Skin.Font(frame.footer)
 		Skin.Font(frame.money)
 		Skin.Font(frame.message)
+		if frame.titleLabel then
+			Skin.Font(frame.titleLabel.text)
+			frame:LayoutHeader() -- the new font changes its width
+		end
 	end)
 	return frame
 end

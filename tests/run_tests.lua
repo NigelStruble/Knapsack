@@ -113,12 +113,24 @@ local function Section(window, key)
 	end
 end
 
+-- The names of a section's items, "-" for the place of one that has gone.
 local function Names(records)
 	local names = {}
 	for i, rec in ipairs(records) do
-		names[i] = rec.info.name
+		names[i] = rec.gap and "-" or rec.info.name
 	end
 	return table.concat(names, ", ")
+end
+
+-- How many items a section shows, not counting places left by items gone.
+local function Shown(section)
+	local count = 0
+	for _, rec in ipairs(section and section.records or {}) do
+		if not rec.gap then
+			count = count + 1
+		end
+	end
+	return count
 end
 
 local function TileFor(window, itemID)
@@ -177,6 +189,32 @@ test("loads cleanly and takes over the bags and bank", function()
 	check(env.BankFrame:GetParent() ~= env.UIParent, "Blizzard's bank moved out of sight")
 	check(env.BankFrame:IsShown(), "but never hidden")
 	check((client.state.secureButtons or 0) >= 34, "item buttons prepared for every bag slot")
+end)
+
+test("Forever is told by its interface number, whatever its project ID", function()
+	-- An October 2026 Forever update made WOW_PROJECT_ID differ from
+	-- WOW_PROJECT_MAINLINE, and Knapsack took Forever for a Classic client:
+	-- the Classic bank's button template does not exist there.
+	local client = Start(function(_, state)
+		state.containers[6] = { size = 98, name = "Tab One", items = { [1] = { id = 4306, count = 20 } } }
+	end, { projectID = 2 })
+	local state, ns = client.state, client.ns
+	check(ns.C.isForever and not ns.C.isClassic, "Forever, the Retail engine")
+	equal(ns.C.KEYRING, nil, "no keyring")
+	equal(ns.C.BANK_CONTAINER, nil, "no Classic bank container")
+	equal(ns.C.BANK_BAGS[1], 6, "the bank is its tabs")
+	state.atBank = true
+	state.interaction[8] = true
+	Mock.Fire(state, "PLAYER_INTERACTION_MANAGER_FRAME_SHOW", 8)
+	Mock.Advance(state, 2)
+	local button = ns.Tiles.Secure.Attached(TileFor(ns.bank, 4306))
+	check(button and button.__template == "ContainerFrameItemButtonTemplate" and button:GetParent():GetID() == 6,
+		"a bank tab's button")
+	NoErrors(client)
+	-- And Anniversary is still Classic.
+	local anniversary = Start(nil, { classic = true })
+	check(anniversary.ns.C.isClassic and not anniversary.ns.C.isForever, "Anniversary: Classic")
+	NoErrors(anniversary)
 end)
 
 test("ToggleAllBags opens and closes the bags", function()
@@ -991,6 +1029,190 @@ test("the whole window can be dragged, and the header has room for it", function
 	NoErrors(client)
 end)
 
+test("the bank, mail, guild vault and Find windows say what they are", function()
+	local client = Start(function(_, state)
+		state.saved = Other({})
+	end)
+	local ns = client.ns
+	local titles = { bank = "Bank", mail = "Mail", guild = "Guild Vault", find = "Find" }
+	for kind, title in pairs(titles) do
+		local window = ns[kind]
+		local label = window.titleLabel
+		equal(label and label.text:GetText(), title, kind .. " window's name")
+		-- Right after the character menu; the Find window has none.
+		check(window.leftWidgets[window.spec.finder and 1 or 2] == label, "%s: the name follows the character menu", kind)
+	end
+	equal(ns.bags.titleLabel, nil, "the bags have their Bank, Mail and Vault buttons instead")
+	ns.ToggleBank()
+	local label, owner = ns.bank.titleLabel, ns.bank.owner
+	local _, _, _, ownerX = owner:GetPoint(1)
+	local _, _, _, labelX = label:GetPoint(1)
+	equal(ownerX, 8, "the character menu first")
+	check(label:GetWidth() > 0 and labelX >= ownerX + owner:GetWidth(), "then the name: %s", tostring(labelX))
+	check(not label:IsMouseEnabled(), "the header still drags by the name")
+	NoErrors(client)
+end)
+
+--------------------------------------------------------------------------------
+-- Keeping places
+--------------------------------------------------------------------------------
+
+-- An item leaves the bags (sold, deposited, used up) and the game says so.
+local function Remove(client, bag, slot)
+	local state = client.state
+	state.containers[bag].items[slot] = nil
+	Mock.Fire(state, "BAG_UPDATE", bag)
+	Mock.Fire(state, "BAG_UPDATE_DELAYED")
+	Mock.Advance(state, 0.5)
+end
+
+local function Put(client, bag, slot, item)
+	local state = client.state
+	state.containers[bag].items[slot] = item
+	Mock.Fire(state, "BAG_UPDATE", bag)
+	Mock.Fire(state, "BAG_UPDATE_DELAYED")
+	Mock.Advance(state, 0.5)
+end
+
+local function Gaps(window)
+	local count = 0
+	for _, tile in ipairs(window.tiles) do
+		if tile.gap then
+			count = count + 1
+		end
+	end
+	return count
+end
+
+test("an item sold from the open bags leaves a gap; the rest stay put", function()
+	local client = Start()
+	local ns = client.ns
+	local bags = OpenBags(client)
+	equal(Names(Section(bags, "consumables").records), "Lesser Healing Potion, Tough Hunk of Bread", "before")
+	local _, _, _, breadX, breadY = TileFor(bags, 4540):GetPoint(1)
+	local _, _, _, swordX, swordY = TileFor(bags, 12345):GetPoint(1)
+
+	Remove(client, 0, 3) -- the potions
+	local section, title = Section(bags, "consumables")
+	equal(Names(section.records), "-, Tough Hunk of Bread", "the potions' place stays, empty")
+	check(Plain(title.text:GetText()):find("Consumables  1", 1, true), "the title counts what is there: " .. Plain(title.text:GetText()))
+	equal(Gaps(bags), 1, "one gap")
+	local _, _, _, x, y = TileFor(bags, 4540):GetPoint(1)
+	check(x == breadX and y == breadY, "the bread did not move")
+	_, _, _, x, y = TileFor(bags, 12345):GetPoint(1)
+	check(x == swordX and y == swordY, "nor did anything else")
+	local button = ns.Tiles.Secure.Attached(TileFor(bags, 4540))
+	check(button and button:GetParent():GetID() == 1 and button:GetID() == 1, "Blizzard's button is still the bread's")
+
+	-- A whole category sold: its places stay until the bags close.
+	for slot = 4, 7 do
+		Remove(client, 0, slot)
+	end
+	equal(Names(Section(bags, "junk").records), "-, -, -, -", "the junk's places")
+	_, _, _, x, y = TileFor(bags, 4540):GetPoint(1)
+	check(x == breadX and y == breadY, "the bread still did not move")
+
+	-- An item moved to another slot keeps its place; a new one goes at the
+	-- end of its category, never into a gap.
+	local bread = client.state.containers[1].items[1]
+	client.state.containers[1].items[1] = nil
+	Put(client, 1, 5, bread)
+	Put(client, 0, 12, { id = 858, count = 2 })
+	equal(Names(Section(bags, "consumables").records), "-, Tough Hunk of Bread, Lesser Healing Potion", "moved and new")
+	_, _, _, x, y = TileFor(bags, 4540):GetPoint(1)
+	check(x == breadX and y == breadY, "the moved bread kept its place")
+	button = ns.Tiles.Secure.Attached(TileFor(bags, 4540))
+	check(button and button:GetParent():GetID() == 1 and button:GetID() == 5, "with the button of its new slot")
+
+	-- Closing the bags tidies up.
+	OpenBags(client)
+	OpenBags(client)
+	equal(Gaps(bags), 0, "no gaps after reopening")
+	equal(Names(Section(bags, "consumables").records), "Lesser Healing Potion, Tough Hunk of Bread", "sorted again")
+	check(not Section(bags, "junk"), "no empty junk section")
+	NoErrors(client)
+end)
+
+test("the broom and the settings lay the bags out afresh; the option turns gaps off", function()
+	local client = Start(function(_, state)
+		state.containers[1].items[2] = { id = 4306, count = 5 }
+		state.containers[1].items[3] = { id = 4306, count = 6 }
+	end)
+	local state, ns = client.state, client.ns
+	local bags = OpenBags(client)
+	Remove(client, 0, 3)
+	equal(Gaps(bags), 1, "a gap")
+	Mock.Click(bags.combineButton)
+	Settle(client)
+	Mock.Advance(state, 0.5)
+	equal(Gaps(bags), 0, "the broom tidies up")
+
+	Remove(client, 0, 4)
+	equal(Gaps(bags), 1, "another gap")
+	Setting(client, "compact", false)
+	equal(Gaps(bags), 0, "a setting changed: laid out afresh")
+
+	Setting(client, "keepPlaces", false)
+	Remove(client, 0, 5)
+	equal(Gaps(bags), 0, "with the option off, the rest move up")
+	ns.DB.Set("keepPlaces", true)
+	NoErrors(client)
+end)
+
+test("the bank window keeps places too; the bank opening lays the bags out afresh", function()
+	local client = Start(function(_, state)
+		Bank(state)
+	end)
+	local state, ns = client.state, client.ns
+	local bags = OpenBags(client)
+	Remove(client, 0, 3)
+	equal(Gaps(bags), 1, "a gap in the bags")
+	VisitBank(client)
+	equal(Gaps(bags), 0, "stacks come apart at the bank: laid out afresh")
+
+	-- At the bank every stack is a tile of its own: one moved to another slot
+	-- keeps its place.
+	local _, _, _, breadX, breadY = TileFor(bags, 4540):GetPoint(1)
+	local bread = state.containers[1].items[1]
+	state.containers[1].items[1] = nil
+	Put(client, 1, 6, bread)
+	local _, _, _, x, y = TileFor(bags, 4540):GetPoint(1)
+	check(x == breadX and y == breadY, "a stack moved to another slot keeps its place")
+
+	local section = Section(ns.bank, "tradegoods")
+	local before = Names(section.records)
+	state.containers[6].items[1] = nil -- the silk, taken out
+	Mock.Fire(state, "BAG_UPDATE", 6)
+	Mock.Fire(state, "BAG_UPDATE_DELAYED")
+	Mock.Advance(state, 1)
+	equal(Names(Section(ns.bank, "tradegoods").records), (before:gsub("Silk Cloth", "-")), "the silk's place stays in the bank window")
+	LeaveBank(client)
+	ns.ToggleBank()
+	equal(Gaps(ns.bank), 0, "away from the bank, the recorded bank has no gaps")
+	NoErrors(client)
+end)
+
+test("a bank window left open after the bank closes shows the record without gaps", function()
+	-- The game's bank window at the bank, Knapsack's opened by hand, and
+	-- stacks never merged, so nothing else starts it afresh.
+	local client = Start(function(_, state)
+		Bank(state)
+		state.saved = { settings = { replaceBank = false, mergeStacks = false } }
+	end)
+	local state, ns = client.state, client.ns
+	VisitBank(client)
+	ns.ToggleBank()
+	state.containers[6].items[1] = nil
+	Mock.Fire(state, "BAG_UPDATE", 6)
+	Mock.Fire(state, "BAG_UPDATE_DELAYED")
+	Mock.Advance(state, 1)
+	equal(Gaps(ns.bank), 1, "a gap at the bank")
+	LeaveBank(client)
+	check(ns.bank:IsShown(), "still open")
+	equal(Gaps(ns.bank), 0, "the record has no gaps")
+	NoErrors(client)
+end)
+
 test("the quality border is whole screen pixels, with the icon inside", function()
 	local client = Start()
 	local bags = OpenBags(client)
@@ -1650,7 +1872,7 @@ test("a whole category into the bank and back out", function()
 	check(entry, "at the bank")
 	entry.callback()
 	Settle(client)
-	check(not Section(bags, "tradegoods"), "no trade goods left in the bags")
+	equal(Shown(Section(bags, "tradegoods")), 0, "no trade goods left in the bags")
 	check(state.containers[6].items[3] and state.containers[6].items[3].id == 2589, "Linen Cloth went to a free bank slot")
 	local silk = state.containers[6].items[4]
 	check(state.containers[6].items[1].count == 20 and silk and silk.id == 4306 and silk.count == 5, "the silk too: the bank's silk stack is full")
@@ -1663,7 +1885,7 @@ test("a whole category into the bank and back out", function()
 	check(entry, "and out again from the bank window")
 	entry.callback()
 	Settle(client)
-	check(Section(bags, "tradegoods"), "back in the bags")
+	check(Shown(Section(bags, "tradegoods")) > 0, "back in the bags")
 	for _, item in pairs(state.containers[2].items) do
 		equal(item.id, 2512, "nothing but arrows in the quiver")
 	end
@@ -2369,7 +2591,7 @@ test("Classic: a whole category into the bank and back out", function()
 	check(entry, "at the bank")
 	entry.callback()
 	Settle(client)
-	check(not Section(bags, "tradegoods"), "no trade goods left in the bags")
+	equal(Shown(Section(bags, "tradegoods")), 0, "no trade goods left in the bags")
 	local moved = state.containers[-1].items[3]
 	check(moved and moved.id == 2589, "the cloth went into the bank's own slots")
 	check(state.chat[#state.chat]:find("Moved 1 items to the bank", 1, true), "says so: " .. state.chat[#state.chat])
@@ -2379,7 +2601,7 @@ test("Classic: a whole category into the bank and back out", function()
 	Settle(client)
 	local left = state.containers[-1].items
 	check(not left[1] and not left[2] and not left[3], "out of the bank's own slots")
-	check(Section(bags, "tradegoods"), "back in the bags")
+	check(Shown(Section(bags, "tradegoods")) > 0, "back in the bags")
 	NoErrors(client)
 end)
 

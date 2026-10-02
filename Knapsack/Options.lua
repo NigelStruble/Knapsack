@@ -118,6 +118,8 @@ local function BuildGeneral(page)
 	}))
 	left:Add(W.Checkbox(page, L["Put small categories side by side"], Get("compact"), Set("compact"),
 		L["Otherwise every category starts on its own row."]))
+	left:Add(W.Checkbox(page, L["Keep items in place while a window is open"], Get("keepPlaces"), Set("keepPlaces"),
+		L["An item you sell, deposit or use up leaves a gap in the bags or bank, so the rest stay where they are until you close the window. New items go at the end of their category."]))
 
 	local right = NewColumn(page, 340, -8)
 	right:Add(W.Header(page, L["Items"], 300))

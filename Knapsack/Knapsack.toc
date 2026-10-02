@@ -2,7 +2,7 @@
 ## Title: Knapsack
 ## Notes: Bags sorted into categories, with junk sorted by vendor value, and your bank, mail, guild vault and other characters viewable from anywhere.
 ## Author: Vedek
-## Version: 1.0.0
+## Version: 1.0.1
 ## Category: Inventory
 ## SavedVariables: KnapsackDB
 ## OptionalDeps: EllesmereUI, ElvUI

@@ -21,11 +21,13 @@ local floor, format = math.floor, string.format
 --------------------------------------------------------------------------------
 
 C.toc = select(4, GetBuildInfo()) or 0
--- Forever reports a 1.6x interface number (16001); nothing else at runtime
--- tells it apart from Retail.
+-- Forever reports a 1.6x interface number (16001).
 C.isForever = C.toc >= 16000 and C.toc < 20000
--- Retail and Forever are "mainline"; everything else is a Classic client.
-C.isClassic = _G.WOW_PROJECT_ID ~= nil and _G.WOW_PROJECT_MAINLINE ~= nil and _G.WOW_PROJECT_ID ~= _G.WOW_PROJECT_MAINLINE
+-- Retail (interface 100000 and up) and Forever run the Retail engine; every
+-- other interface number is a Classic client (Anniversary is 20506). The
+-- interface number decides, as in Questie, not WOW_PROJECT_ID: a Forever
+-- update (October 2026) made Forever's project ID differ from Retail's.
+C.isClassic = not C.isForever and C.toc > 0 and C.toc < 100000
 
 --------------------------------------------------------------------------------
 -- Secret values

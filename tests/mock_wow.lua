@@ -769,6 +769,8 @@ Mock.BANK_SLOT_COSTS = { 1000, 10000, 100000, 250000, 250000, 250000, 250000 }
 -- options.classic: a Classic client (Burning Crusade Classic Anniversary).
 -- options.bankTabs: number of CharacterBankTab_N in the enum (9 on Forever).
 -- options.toc: interface number (16001 = Forever, 20506 = Anniversary).
+-- options.projectID: WOW_PROJECT_ID, if not the usual (1 Retail engine, 5
+-- Classic); Forever's stopped matching Retail's in an October 2026 update.
 function Mock.New(options)
 	options = options or {}
 	local classic = options.classic and true or false
@@ -871,7 +873,7 @@ function Mock.New(options)
 
 	-- Client
 	env.WOW_PROJECT_MAINLINE = 1
-	env.WOW_PROJECT_ID = classic and 5 or 1
+	env.WOW_PROJECT_ID = options.projectID or (classic and 5 or 1)
 	env.GetBuildInfo = function()
 		if classic then
 			return "2.5.6", "12345", "Sep 1 2026", options.toc or 20506

@@ -24,6 +24,7 @@ DB.DEFAULTS = {
 	tileSize = 36,
 	scale = 1,
 	compact = true, -- small categories side by side
+	keepPlaces = true, -- items keep their places while the bags or bank stay open
 	borderSize = 2, -- quality border, in screen pixels
 	itemLevel = true, -- item level on gear
 	unusableTint = true, -- red, colorless icons for items the character cannot use

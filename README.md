@@ -24,6 +24,9 @@ characters' bags can be looked at from anywhere.
   [Searching](#searching)).
 - **New items first.** What you just looted goes in a New section at the top
   of the bags until you close them.
+- **Items stay put.** While the bags or bank are open, an item you sell,
+  deposit or use up leaves an empty gap, so the items around it do not move
+  under the mouse. Closing the window tidies up.
 - **Tradable at a glance.** Items that are Bind on Equip or Bind on Use and
   not bound yet say BoE or BoU in the corner.
 - **Move a whole category.** At the bank, put a whole category in the bank or
@@ -124,6 +127,15 @@ opens its windows to look at them.
 - **Free:** the last tile shows your free slots. Drop an item on it to put the
   item in an empty slot. Quivers and other special bags get their own tile;
   the keyring's empty slots are not shown.
+- **Gaps:** while the window stays open, an item that leaves the bags (sold,
+  put in the bank, used up) leaves an empty gap and nothing moves. An item that
+  comes in goes at the end of its category, never into a gap, so a quick click
+  cannot catch it. Closing the window, the broom, or changing the options or
+  categories lays everything out afresh, and so does a window that makes
+  merged stacks come apart (a mailbox's send page, trade, the auction house,
+  the bank or the guild vault). The bank window works the same way at the
+  bank. Turn it off with **Keep items in place while a window is open** in the
+  options.
 - **Category titles:** drop an item on a title to keep that item in that
   category from now on. Middle-click the item to put it back where it would go
   on its own. Right-click a title to hide it or move it, and:
@@ -252,7 +264,8 @@ options.
 
 - **General:** whether Knapsack replaces the bags and the bank (after a
   `/reload`), items per row, item size, scale, whether small categories share
-  a row, merging stacks, new items first, item levels, the BoE / BoU marks,
+  a row, keeping items in place while a window is open, merging stacks, new
+  items first, item levels, the BoE / BoU marks,
   red for items you cannot use, the width of the quality border (in screen
   pixels, so it stays sharp at any scale), how items are sorted, the junk
   options and the tooltip counts.

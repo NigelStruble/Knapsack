@@ -197,7 +197,7 @@ function Tiles.Release(tile)
 	Tiles.Secure.Detach(tile)
 	tile:Hide()
 	tile:ClearAllPoints()
-	tile.record, tile.free = nil, nil
+	tile.record, tile.free, tile.gap = nil, nil, nil
 	if GameTooltip:IsOwned(tile) then
 		GameTooltip:Hide()
 	end
@@ -241,7 +241,7 @@ end
 
 -- Draws an item. rec comes from a window (see Window.lua: Prepare).
 function Tiles.Set(tile, rec, size)
-	tile.record, tile.free = rec, nil
+	tile.record, tile.free, tile.gap = rec, nil, nil
 	tile:SetSize(size, size)
 	SizeBorder(tile)
 	tile.bg:SetColorTexture(SLOT_BG[1], SLOT_BG[2], SLOT_BG[3], SLOT_BG[4])
@@ -313,9 +313,27 @@ function Tiles.Set(tile, rec, size)
 	tile.hover:Hide()
 end
 
+-- Draws the place of an item that has left while the window stays open (see
+-- Window.lua: keeping places): an empty slot, so the items around it stay put.
+function Tiles.SetGap(tile, size)
+	tile.record, tile.free, tile.gap = nil, nil, true
+	tile:SetSize(size, size)
+	SizeBorder(tile)
+	tile.bg:SetColorTexture(FREE_BG[1], FREE_BG[2], FREE_BG[3], FREE_BG[4])
+	tile.icon:Hide()
+	SetBorder(tile, BORDER_PLAIN[1], BORDER_PLAIN[2], BORDER_PLAIN[3])
+	tile.count:SetText("")
+	tile.value:SetText("")
+	tile.level:SetText("")
+	tile.quest:Hide()
+	tile.glow:Hide()
+	tile.cooldown:Hide()
+	tile.hover:Hide()
+end
+
 -- Draws the free slots of one bag family: entry = { count, bag, slot, name, live }.
 function Tiles.SetFree(tile, entry, size)
-	tile.record, tile.free = nil, entry
+	tile.record, tile.free, tile.gap = nil, entry, nil
 	tile:SetSize(size, size)
 	SizeBorder(tile)
 	tile.bg:SetColorTexture(FREE_BG[1], FREE_BG[2], FREE_BG[3], FREE_BG[4])
