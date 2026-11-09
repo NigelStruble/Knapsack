@@ -15,8 +15,15 @@ characters' bags can be looked at from anywhere.
   first junk item is always the one to throw away. Each junk item shows its
   value, and the category title shows the total.
 - **Your own categories.** A category can take items by quality, item type,
-  binding (such as Bind on Equip gear that is not bound yet) or part of their
-  name, and you can drop any item onto a category's title to keep it there.
+  binding (such as Bind on Equip gear that is not bound yet), whether you have
+  worn the gear, or part of their name, and you can drop any item onto a
+  category's title to keep it there.
+- **Sort by price.** Items in a category can be sorted by what each stack is
+  worth, most or least valuable first: by vendor price, or by auction price
+  from Auctionator or TradeSkillMaster where one of them knows it. As with
+  junk, each item then shows its price and each category's title the total.
+  BoE and BoU marks move to the top corner to make room. If an item has no
+  auction price, its tooltip says the vendor price was used.
 - **Find anything.** Type part of an item's name to see every place you have
   it: each character's bags, bank and mail, and your guild vaults.
 - **Search keywords.** Every search box also takes words such as `boe`,
@@ -24,11 +31,17 @@ characters' bags can be looked at from anywhere.
   [Searching](#searching)).
 - **New items first.** What you just looted goes in a New section at the top
   of the bags until you close them.
-- **Items stay put.** While the bags or bank are open, an item you sell,
-  deposit or use up leaves an empty gap, so the items around it do not move
-  under the mouse. Closing the window tidies up.
+- **Items stay put.** While the bags or bank are open, nothing moves under
+  the mouse. An item you sell, deposit, disenchant or use up leaves an empty
+  gap, and anything that comes in fills a gap or goes at the very end.
+  Closing the window tidies up.
 - **Tradable at a glance.** Items that are Bind on Equip or Bind on Use and
   not bound yet say BoE or BoU in the corner.
+- **Gear you have worn.** Gear your character has worn has a small check in
+  the corner, so gear you keep for another set stands out from gear you only
+  picked up. Knapsack tells copies apart: of two of the same sword, only the
+  one you wore is marked. Gear you wore before Knapsack kept track counts once
+  you put it on again; on Forever, gear in an equipment set always counts.
 - **Move a whole category.** At the bank, put a whole category in the bank or
   take it out; at a mailbox, mail a whole category to one of your characters.
 - **Merged stacks.** All stacks of an item show as one tile with the total,
@@ -81,7 +94,7 @@ characters' bags can be looked at from anywhere.
 
 | Game | Folder | Interface |
 |---|---|---|
-| WoW: Forever | `_classic_beta_` (beta) | 16001 |
+| WoW: Forever | `_forever_` | 16001 |
 | Burning Crusade Classic Anniversary | `_anniversary_` | 20506 |
 | Retail (Midnight) | `_retail_` | 120100, 120105 |
 
@@ -90,7 +103,7 @@ On Retail, the Warband bank is not shown.
 ## Installing
 
 1. Copy the `Knapsack` folder into the game's AddOns folder, for example
-   `World of Warcraft\_classic_beta_\Interface\AddOns\Knapsack` or
+   `World of Warcraft\_forever_\Interface\AddOns\Knapsack` or
    `World of Warcraft\_anniversary_\Interface\AddOns\Knapsack`, and restart the
    game (a new addon is only found at start-up, not by `/reload`).
 2. In the AddOns list, turn off any other bag addon, such as BetterBags,
@@ -124,13 +137,19 @@ opens its windows to look at them.
   the item level of gear top left, and a junk item's value bottom left. Using
   or selling a merged tile takes its smallest stack first, or the item with the
   fewest charges left.
-- **Free:** the last tile shows your free slots. Drop an item on it to put the
-  item in an empty slot. Quivers and other special bags get their own tile;
-  the keyring's empty slots are not shown.
-- **Gaps:** while the window stays open, an item that leaves the bags (sold,
-  put in the bank, used up) leaves an empty gap and nothing moves. An item that
-  comes in goes at the end of its category, never into a gap, so a quick click
-  cannot catch it. Closing the window, the broom, or changing the options or
+- **Free:** after the categories, a tile shows your free slots, 0 when the
+  bags are full. Drop an item on it to put the item in an empty slot. Quivers
+  and other special bags get their own tile; the keyring's empty slots are not
+  shown.
+- **Gaps:** while the window stays open, nothing shown moves. An item that
+  leaves the bags (sold, put in the bank, disenchanted, used up) leaves an
+  empty gap. An item that stays keeps its place, even when loot lands on its
+  stack and makes it new (it glows instead). An item that comes in takes the
+  first gap in its own category, or else goes in **Just added**, after the
+  free space, into a gap there if it has one; a category's title menu moves
+  its items in Just added too. The window grows downward, so nothing in it
+  moves, and near the bottom of the screen it scrolls instead.
+  Closing the window, the broom, or changing the options or
   categories lays everything out afresh, and so does a window that makes
   merged stacks come apart (a mailbox's send page, trade, the auction house,
   the bank or the guild vault). The bank window works the same way at the
@@ -215,6 +234,7 @@ match all of them:
 | `junk`, `common`, `uncommon`, `rare`, `epic`, `legendary` | Items of that quality |
 | `gear`, `consumable`, `reagent`, `tradegoods`, `recipe`, `quest` | Items of that kind |
 | `new`, `charges`, `unusable` | New items, items with charges, items you cannot use |
+| `worn`, `unworn` | Gear you have worn, or only picked up |
 | `ilvl>30`, `ilvl<=20`, `ilvl=25` | Gear by item level |
 | `!soulbound` | `!` turns a word around |
 | `#new` | `#` means the keyword, not a name |
@@ -265,14 +285,17 @@ options.
 - **General:** whether Knapsack replaces the bags and the bank (after a
   `/reload`), items per row, item size, scale, whether small categories share
   a row, keeping items in place while a window is open, merging stacks, new
-  items first, item levels, the BoE / BoU marks,
-  red for items you cannot use, the width of the quality border (in screen
-  pixels, so it stays sharp at any scale), how items are sorted, the junk
-  options and the tooltip counts.
+  items first, item levels, the BoE / BoU marks, the check on gear you have
+  worn, red for items you cannot use, the width of the quality border (in
+  screen pixels, so it stays sharp at any scale), how items are sorted (by
+  quality, name, type, or price, most or least valuable first), which price to
+  sort by (vendor, or auction where Auctionator or TradeSkillMaster knows it),
+  whether each item shows that price, the junk options and the tooltip counts.
 - **Categories:** show, hide, rename and reorder categories; make your own with
-  rules for quality, item type, binding and name; forget items dropped into a
-  category. For a group of Bind on Equip items you can still sell, make a
-  category and set only its Binding to "Bind on Equip, not bound yet".
+  rules for quality, item type, binding, worn gear and name; forget items
+  dropped into a category. For a group of Bind on Equip items you can still
+  sell, make a category and set only its Binding to "Bind on Equip, not bound
+  yet"; for gear to get rid of, set only its Worn to "Gear you have not worn".
 - **Characters:** forget characters and guild vaults you no longer play. On
   Forever, **Show surnames** shows your characters' first and last names
   everywhere; characters that share a first name always show both.

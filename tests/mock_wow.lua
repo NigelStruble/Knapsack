@@ -51,6 +51,8 @@ Mock.ITEMS = {
 	[4238] = { "Linen Bag", 1, 1, 0, 100, 133639, "INVTYPE_BAG" },
 	[2101] = { "Light Quiver", 1, 11, 2, 1, 134407, "INVTYPE_BAG" },
 	[5396] = { "Key to Searing Gorge", 1, 13, 0, 0, 134237 },
+	[5523] = { "Small Barnacled Clam", 1, 15, 0, 0, 132594 },
+	[5503] = { "Clam Meat", 1, 7, 8, 4, 133970 },
 }
 
 -- What the tuples above leave out: maxStack (default 20), level (item level,
@@ -85,13 +87,17 @@ local QUALITY_COLORS = {
 	[5] = { 1, 0.5, 0, "ffff8000" },
 }
 
--- Links as Forever makes them. crafter: the GUID of the player who made the
--- item, which the game puts in the links of crafted items that do not stack
--- (Wizard Oil): "item:20744::::::::20:1487::::::::Player-4618-00AB97C1:".
-function Mock.Link(itemID, crafter)
+-- Links as Forever makes them. Their 9th and 10th fields are the level and
+-- specialization of the character the game made the link for (60 and 1487
+-- unless given): the client's links change when the character levels up (see
+-- state.Link). crafter: the GUID of the player who made the item, which the
+-- game puts in the links of crafted items that do not stack (Wizard Oil):
+-- "item:20744::::::::20:1487::::::::Player-4618-00AB97C1:".
+function Mock.Link(itemID, crafter, level, spec)
 	local item = Mock.ITEMS[itemID]
 	local color = QUALITY_COLORS[item and item[2] or 1][4]
-	return format("|c%s|Hitem:%d::::::::60:1487::::::::%s:|h[%s]|h|r", color, itemID, crafter or "", item and item[1] or "Unknown")
+	return format("|c%s|Hitem:%d::::::::%s:%s::::::::%s:|h[%s]|h|r", color, itemID, level or 60, spec or 1487, crafter or "",
+		item and item[1] or "Unknown")
 end
 
 --------------------------------------------------------------------------------
@@ -257,21 +263,58 @@ function Methods:GetNumPoints()
 	return #self.__points
 end
 
--- Positions are not laid out; these numbers only have to be plausible.
+-- A frame placed by one point on UIParent (a window) is where the client would
+-- put it, in its own units, and kept on the screen if it asks to be: the
+-- client pushes a window back onto the screen, moving everything in it.
+-- Nothing else is laid out; those numbers only have to be plausible.
+local function Across(point)
+	return point:find("LEFT") and 0 or point:find("RIGHT") and 1 or 0.5
+end
+
+local function Up(point)
+	return point:find("BOTTOM") and 0 or point:find("TOP") and 1 or 0.5
+end
+
+local function Placed(frame)
+	local points = rawget(frame, "__points")
+	local p = points[1]
+	local screen = frame.__state.env.UIParent
+	if #points ~= 1 or p[1] == "ALL" or p[2] ~= screen then
+		return nil
+	end
+	local scale = frame:GetScale()
+	local width, height = frame:GetWidth(), frame:GetHeight()
+	local screenWidth, screenHeight = screen:GetWidth() / scale, screen:GetHeight() / scale
+	local left = Across(p[3]) * screenWidth + p[4] - Across(p[1]) * width
+	local bottom = Up(p[3]) * screenHeight + p[5] - Up(p[1]) * height
+	if frame.__clamped then
+		left = math.max(0, math.min(left, screenWidth - width))
+		bottom = math.max(0, math.min(bottom, screenHeight - height))
+	end
+	return left, bottom, width, height
+end
+
+function Methods:SetClampedToScreen(clamped)
+	rawset(self, "__clamped", clamped and true or false)
+end
+
 function Methods:GetLeft()
-	return 100
+	return Placed(self) or 100
 end
 
 function Methods:GetRight()
-	return 100 + self:GetWidth()
+	local left, _, width = Placed(self)
+	return left and left + width or 100 + self:GetWidth()
 end
 
 function Methods:GetTop()
-	return 700
+	local _, bottom, _, height = Placed(self)
+	return bottom and bottom + height or 700
 end
 
 function Methods:GetBottom()
-	return 700 - self:GetHeight()
+	local _, bottom = Placed(self)
+	return bottom or 700 - self:GetHeight()
 end
 
 function Methods:SetScale(scale)
@@ -464,7 +507,7 @@ local function Noop() end
 -- method still fails.
 local NOOPS = {}
 for _, name in ipairs({
-	"SetMovable", "SetClampedToScreen", "SetToplevel", "SetFrameStrata", "RegisterForDrag", "RegisterForClicks",
+	"SetMovable", "SetToplevel", "SetFrameStrata", "RegisterForDrag", "RegisterForClicks",
 	"SetJustifyH", "SetJustifyV", "SetWordWrap", "SetFontObject", "SetTextInsets", "SetAutoFocus", "SetMaxLetters",
 	"SetCursorPosition", "ClearFocus", "SetBlendMode", "SetTexCoord", "SetOrientation", "SetValueStep",
 	"SetObeyStepOnDrag", "SetThumbTexture", "EnableMouseWheel", "SetDrawEdge", "Raise", "Lower",
@@ -616,7 +659,7 @@ local function NewTooltip(state, name)
 	-- item: the item where it is ({ id, count, charges }), for its charges.
 	local function ShowItem(self, itemID, item)
 		self.item = itemID
-		self.itemLink = itemID and Mock.ITEMS[itemID] and Mock.Link(itemID, item and item.crafter)
+		self.itemLink = itemID and Mock.ITEMS[itemID] and state.Link(itemID, item and item.crafter)
 		if state.classic then
 			local data = state.TooltipData(itemID, item)
 			local lines = {}
@@ -754,10 +797,11 @@ local KNOWN_EVENTS = {
 	"PLAYER_REGEN_ENABLED", "PLAYER_REGEN_DISABLED", "MAIL_SHOW", "MAIL_CLOSED", "TRADE_SHOW", "TRADE_CLOSED",
 	"AUCTION_HOUSE_SHOW", "AUCTION_HOUSE_CLOSED", "SKILL_LINES_CHANGED", "NEW_RECIPE_LEARNED", "UI_SCALE_CHANGED",
 	"DISPLAY_SIZE_CHANGED", "UNIT_SPELLCAST_SUCCEEDED", "MAIL_INBOX_UPDATE", "MAIL_SEND_SUCCESS", "MAIL_FAILED",
+	"PLAYER_EQUIPMENT_CHANGED",
 }
 
 -- Events only one kind of client has.
-local RETAIL_EVENTS = { "BANK_TABS_CHANGED", "BANK_TAB_SETTINGS_UPDATED" }
+local RETAIL_EVENTS = { "BANK_TABS_CHANGED", "BANK_TAB_SETTINGS_UPDATED", "EQUIPMENT_SETS_CHANGED" }
 local CLASSIC_EVENTS = { "PLAYERBANKBAGSLOTS_CHANGED" }
 
 -- The Classic bank's own slots and the keyring's, as inventory slots.
@@ -796,6 +840,7 @@ function Mock.New(options)
 		sentMail = {},
 		returnedMail = {},
 		bagMoves = {},
+		equipped = {},
 		containers = {},
 		bankBags = {},
 		atBank = false,
@@ -810,8 +855,12 @@ function Mock.New(options)
 		loadedAddons = {},
 		blizzard = {},
 		money = 123456,
-		player = { name = "Vedek", realm = "Doomhowl", class = "PRIEST", level = 60, faction = "Alliance" },
+		player = { name = "Vedek", realm = "Doomhowl", class = "PRIEST", level = 60, spec = 1487, faction = "Alliance" },
 	}
+	-- The links the client gives out: for the character as it is now.
+	function state.Link(itemID, crafter)
+		return Mock.Link(itemID, crafter, state.player.level, state.player.spec)
+	end
 	for _, event in ipairs(KNOWN_EVENTS) do
 		state.events[event] = true
 	end
@@ -1105,7 +1154,7 @@ function Mock.New(options)
 			local data = Mock.ITEMS[item.id]
 			return {
 				itemID = item.id,
-				hyperlink = Mock.Link(item.id, item.crafter),
+				hyperlink = state.Link(item.id, item.crafter),
 				stackCount = item.count or 1,
 				quality = data and data[2],
 				iconFileID = data and data[6],
@@ -1135,6 +1184,17 @@ function Mock.New(options)
 			return c and c.name
 		end,
 	}
+	-- The Retail engine's equipment sets: an item with .inSet is in one.
+	if not classic then
+		env.C_Container.GetContainerItemEquipmentSetInfo = function(bag, slot)
+			local c = Mock.Container(state, bag)
+			local item = c and c.items[slot]
+			if item and item.inSet then
+				return true, item.inSet
+			end
+			return false, ""
+		end
+	end
 	env.C_NewItems = {
 		IsNewItem = function(bag, slot)
 			local c = Mock.Container(state, bag)
@@ -1319,7 +1379,7 @@ function Mock.New(options)
 				return nil
 			end
 			local extra = Mock.Extra(id)
-			return data[1], Mock.Link(id), data[2], extra.level or 10, 1, "Type", "SubType", extra.maxStack or 20,
+			return data[1], state.Link(id), data[2], extra.level or 10, 1, "Type", "SubType", extra.maxStack or 20,
 				data[7] or "", data[6], data[5], data[3], data[4], extra.bind or 0
 		end,
 		GetItemFamily = function(item)
@@ -1349,6 +1409,33 @@ function Mock.New(options)
 		end,
 		GetItemClassInfo = function(classID)
 			return "Class" .. classID
+		end,
+		-- Every item has its own GUID, which goes wherever it goes: given to
+		-- an item (its table) the first time it is asked for.
+		GetItemGUID = function(location)
+			local item
+			if location.equipSlot then
+				item = state.equipped[location.equipSlot]
+			else
+				local c = Mock.Container(state, location.bag)
+				item = c and c.items[location.slot]
+			end
+			if not item then
+				error("GetItemGUID: no item at that location")
+			end
+			if not item.guid then
+				state.lastGUID = (state.lastGUID or 0) + 1
+				item.guid = format("Item-4618-0-%08X", state.lastGUID)
+			end
+			return item.guid
+		end,
+	}
+	env.ItemLocation = {
+		CreateFromBagAndSlot = function(_, bag, slot)
+			return { bag = bag, slot = slot }
+		end,
+		CreateFromEquipmentSlot = function(_, slot)
+			return { equipSlot = slot }
 		end,
 	}
 	env.C_Texture = {
@@ -1442,7 +1529,7 @@ function Mock.New(options)
 	env.GetInboxItemLink = function(index, attachment)
 		local m = state.mailbox[index]
 		local item = m and m.items and m.items[attachment]
-		return item and Mock.Link(item.id, item.crafter)
+		return item and state.Link(item.id, item.crafter)
 	end
 	env.InboxItemCanDelete = function(index)
 		local m = state.mailbox[index]
@@ -1460,7 +1547,7 @@ function Mock.New(options)
 	end
 	env.GetSendMailItemLink = function(attachment)
 		local item = state.sendMail.items[attachment]
-		return item and Mock.Link(item.id, item.crafter)
+		return item and state.Link(item.id, item.crafter)
 	end
 	env.GetSendMailMoney = function()
 		return state.sendMail.money or 0
@@ -1504,9 +1591,14 @@ function Mock.New(options)
 		end
 		error("not a bag slot: " .. tostring(bag))
 	end
-	-- What an inventory slot holds: a worn bag's item ID, or on Classic also a
-	-- bank or keyring slot's item ID and the item.
+	-- What an inventory slot holds: the gear in an equipment slot (1 to 19,
+	-- state.equipped[slot] = { id }), a worn bag's item ID, or on Classic also
+	-- a bank or keyring slot's item ID and the item.
 	function state.InventoryItem(slot)
+		if slot >= 1 and slot <= 19 then
+			local item = state.equipped[slot]
+			return item and item.id, item
+		end
 		if not classic then
 			local c = state.containers[slot - 30]
 			return c and c.bagItem
@@ -1530,7 +1622,7 @@ function Mock.New(options)
 	end
 	env.GetInventoryItemLink = function(_, slot)
 		local id = state.InventoryItem(slot)
-		return id and Mock.Link(id)
+		return id and state.Link(id)
 	end
 	env.GetInventoryItemTexture = function(_, slot)
 		local id = state.InventoryItem(slot)
@@ -1565,7 +1657,7 @@ function Mock.New(options)
 	env.GetGuildBankItemLink = function(tab, slot)
 		local t = state.guild and state.guildLoaded[tab] and state.guild.tabs[tab]
 		local item = t and t.items[slot]
-		return item and Mock.Link(item.id)
+		return item and state.Link(item.id)
 	end
 	env.GetGuildBankItemInfo = function(tab, slot)
 		local t = state.guild and state.guildLoaded[tab] and state.guild.tabs[tab]
@@ -1704,6 +1796,27 @@ function Mock.DeliverMail(state)
 	end
 	state.sendMail.items = {}
 	Mock.Fire(state, "MAIL_SEND_SUCCESS")
+end
+
+-- Puts on the gear in a bag slot (equipSlot: 1 head ... 16 main hand), and
+-- whatever was worn there goes into that bag slot, as the game swaps them.
+function Mock.Equip(state, bag, slot, equipSlot)
+	local c = state.containers[bag]
+	local item = c.items[slot]
+	c.items[slot] = state.equipped[equipSlot]
+	state.equipped[equipSlot] = item
+	Mock.Fire(state, "BAG_UPDATE", bag)
+	Mock.Fire(state, "PLAYER_EQUIPMENT_CHANGED", equipSlot, true)
+	Mock.Fire(state, "BAG_UPDATE_DELAYED")
+end
+
+-- Takes off the gear in an equipment slot, into an empty bag slot.
+function Mock.Unequip(state, equipSlot, bag, slot)
+	state.containers[bag].items[slot] = state.equipped[equipSlot]
+	state.equipped[equipSlot] = nil
+	Mock.Fire(state, "BAG_UPDATE", bag)
+	Mock.Fire(state, "PLAYER_EQUIPMENT_CHANGED", equipSlot, false)
+	Mock.Fire(state, "BAG_UPDATE_DELAYED")
 end
 
 -- The mouse enters a frame, as far as scripts are concerned.

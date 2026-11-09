@@ -327,6 +327,11 @@ test("junk whose price is not loaded yet goes last until it arrives", function()
 	state.unloaded[9999] = nil
 	Mock.Fire(state, "GET_ITEM_INFO_RECEIVED", 9999, true)
 	Mock.Advance(state, 0.2)
+	-- Items stay put while the bags are open (keeping places)...
+	equal(Names(Section(bags, "junk").records), "Battered Buckler, Rabbit's Foot, Ruined Pelt, Sharp Claw, Mystery Trinket", "in place while open")
+	-- ...and are sorted again when they next open.
+	OpenBags(client)
+	OpenBags(client)
 	equal(Names(Section(bags, "junk").records), "Battered Buckler, Mystery Trinket, Rabbit's Foot, Ruined Pelt, Sharp Claw", "sorted by its price (7c)")
 	NoErrors(client)
 end)
@@ -1084,6 +1089,43 @@ local function Gaps(window)
 	return count
 end
 
+-- Where each item's tile is in the window, by item ID.
+local function TilePlaces(window)
+	local places = {}
+	for _, tile in ipairs(window.tiles) do
+		if tile.record and tile.record.itemID then
+			local _, _, _, x, y = tile:GetPoint(1)
+			places[tile.record.itemID] = x .. "," .. y
+		end
+	end
+	return places
+end
+
+local function Unmoved(window, before, what)
+	local now = TilePlaces(window)
+	for id, place in pairs(before) do
+		if now[id] ~= place then
+			return check(false, "%s: item %d went from %s to %s", what, id, place, tostring(now[id]))
+		end
+	end
+	return check(true, what)
+end
+
+-- Where a window's top-left corner is on the screen. The tiles are placed
+-- from it: if it moves, they all do.
+local function Corner(window)
+	return window:GetLeft() .. "," .. window:GetTop()
+end
+
+-- The tile of the free space in the bags' own slots.
+local function FreeTile(window)
+	for _, tile in ipairs(window.tiles) do
+		if tile.free and tile.free.family == 0 then
+			return tile
+		end
+	end
+end
+
 test("an item sold from the open bags leaves a gap; the rest stay put", function()
 	local client = Start()
 	local ns = client.ns
@@ -1112,13 +1154,15 @@ test("an item sold from the open bags leaves a gap; the rest stay put", function
 	_, _, _, x, y = TileFor(bags, 4540):GetPoint(1)
 	check(x == breadX and y == breadY, "the bread still did not move")
 
-	-- An item moved to another slot keeps its place; a new one goes at the
-	-- end of its category, never into a gap.
+	-- An item moved to another slot keeps its place; potions bought take the
+	-- empty place in their category.
 	local bread = client.state.containers[1].items[1]
 	client.state.containers[1].items[1] = nil
 	Put(client, 1, 5, bread)
+	equal(Names(Section(bags, "consumables").records), "-, Tough Hunk of Bread", "moved, in its place")
 	Put(client, 0, 12, { id = 858, count = 2 })
-	equal(Names(Section(bags, "consumables").records), "-, Tough Hunk of Bread, Lesser Healing Potion", "moved and new")
+	equal(Names(Section(bags, "consumables").records), "Lesser Healing Potion, Tough Hunk of Bread", "the new potions in the empty place")
+	equal(Section(bags, "arrived"), nil, "nothing just added")
 	_, _, _, x, y = TileFor(bags, 4540):GetPoint(1)
 	check(x == breadX and y == breadY, "the moved bread kept its place")
 	button = ns.Tiles.Secure.Attached(TileFor(bags, 4540))
@@ -1130,6 +1174,265 @@ test("an item sold from the open bags leaves a gap; the rest stay put", function
 	equal(Gaps(bags), 0, "no gaps after reopening")
 	equal(Names(Section(bags, "consumables").records), "Lesser Healing Potion, Tough Hunk of Bread", "sorted again")
 	check(not Section(bags, "junk"), "no empty junk section")
+	check(not Section(bags, "arrived"), "no Just added")
+	NoErrors(client)
+end)
+
+test("disenchanting: loot landing in the bags moves nothing", function()
+	local client = Start(function(_, state)
+		state.containers[1].items[2] = { id = 7070, count = 3 } -- Elemental Water, the "dust"
+	end)
+	local state = client.state
+	local bags = OpenBags(client)
+	local function At(id)
+		local tile = TileFor(bags, id)
+		local _, _, _, x, y = tile:GetPoint(1)
+		return x .. "," .. y
+	end
+	local free
+	for _, tile in ipairs(bags.tiles) do
+		if tile.free and tile.free.family == 0 then
+			free = tile
+		end
+	end
+	local _, _, _, freeX, freeY = free:GetPoint(1)
+	local before = { water = At(7070), linen = At(2589), potion = At(858), key = At(11000), claw = At(5635) }
+
+	-- The sword is disenchanted: it goes, its dust lands on the dust already
+	-- there (marking that stack new), and a kind of dust never seen before
+	-- this session comes too.
+	state.containers[0].items[8] = nil
+	state.containers[1].items[2] = { id = 7070, count = 5, new = true }
+	state.unloaded[4306] = true
+	state.containers[1].items[3] = { id = 4306, count = 2, new = true }
+	Mock.Fire(state, "BAG_UPDATE", 0)
+	Mock.Fire(state, "BAG_UPDATE", 1)
+	Mock.Fire(state, "BAG_UPDATE_DELAYED")
+	Mock.Advance(state, 0.5)
+	equal(Names(Section(bags, "equipment").records), "-", "the sword's place stays")
+	equal(Section(bags, "new"), nil, "no New section pushing everything down")
+	for what, at in pairs(before) do
+		equal(At(({ water = 7070, linen = 2589, potion = 858, key = 11000, claw = 5635 })[what]), at, what .. " in place")
+	end
+	check(TileFor(bags, 7070).glow:IsShown(), "the dust it landed on glows as new")
+	equal(TileFor(bags, 7070).record.count, 5, "with its new count")
+	equal(Names(Section(bags, "arrived").records), "Silk Cloth", "the new kind of dust, just added")
+	local _, _, _, x, y = free:GetPoint(1)
+	check(x == freeX and y == freeY, "even the free space stays put")
+
+	-- Its item data arriving, and a skill going up, move nothing either.
+	state.unloaded[4306] = nil
+	Mock.Fire(state, "GET_ITEM_INFO_RECEIVED", 4306, true)
+	Mock.Fire(state, "SKILL_LINES_CHANGED")
+	Mock.Advance(state, 1)
+	equal(Names(Section(bags, "equipment").records), "-", "the gap stays")
+	for what, at in pairs(before) do
+		equal(At(({ water = 7070, linen = 2589, potion = 858, key = 11000, claw = 5635 })[what]), at, what .. " still in place")
+	end
+	NoErrors(client)
+end)
+
+test("levelling up with the bags open moves nothing", function()
+	-- Every link the game gives out names the character's level, and on
+	-- Forever its specialization: a level gained changes them all.
+	local client = Start(function(_, state)
+		state.player.level = 31
+		state.containers[0].items[2].new = true -- Linen Cloth
+		state.containers[1].items[2] = { id = 4306, count = 5 } -- Silk Cloth, in two stacks
+		state.containers[1].items[3] = { id = 4306, count = 6 }
+	end)
+	local state = client.state
+	local bags = OpenBags(client)
+	local titles, before = Titles(bags), TilePlaces(bags)
+	state.containers[0].items[2].new = nil -- the linen looked at: the game no longer marks it new
+
+	state.player.level = 32
+	Mock.Fire(state, "PLAYER_LEVEL_UP", 32)
+	Mock.Advance(state, 1)
+	check(TileFor(bags, 2589).record.link:find("::::::::32:", 1, true), "the links name the new level")
+	equal(Section(bags, "arrived"), nil, "nothing just added")
+	equal(Titles(bags), titles, "the same sections")
+	Unmoved(bags, before, "every item where it was")
+	equal(Names(Section(bags, "new").records), "Linen Cloth", "the linen still new")
+	equal(TileFor(bags, 4306).count:GetText(), "11", "the silk still one tile")
+
+	-- Loot after it is all that is just added.
+	Put(client, 0, 12, { id = 7070, count = 2 })
+	equal(Names(Section(bags, "arrived").records), "Elemental Water", "the loot, just added")
+
+	-- A new specialization changes every link too.
+	before = TilePlaces(bags)
+	before[3300] = nil -- the Rabbit's Foot, sold
+	state.player.spec = 1490
+	Remove(client, 0, 6)
+	check(TileFor(bags, 2589).record.link:find(":1490:", 1, true), "the links name the new specialization")
+	equal(Names(Section(bags, "arrived").records), "Elemental Water", "still only the loot")
+	equal(Names(Section(bags, "junk").records), "Battered Buckler, -, Ruined Pelt, Sharp Claw", "the foot's place stays")
+	Unmoved(bags, before, "the rest where they were")
+
+	-- With places not kept, a new item stays new all the same.
+	Setting(client, "keepPlaces", false)
+	state.player.level = 33
+	Mock.Fire(state, "PLAYER_LEVEL_UP", 33)
+	Mock.Advance(state, 1)
+	local new = Section(bags, "new")
+	equal(new and Names(new.records), "Linen Cloth", "the linen still new without keeping places")
+	NoErrors(client)
+end)
+
+test("what comes in takes an empty place: in its own category, else in Just added", function()
+	local client = Start()
+	local bags = OpenBags(client)
+	local _, _, _, potionX, potionY = TileFor(bags, 858):GetPoint(1)
+	Remove(client, 0, 3) -- the potions, drunk
+	Put(client, 0, 12, { id = 13446, count = 2 }) -- other potions, bought
+	equal(Names(Section(bags, "consumables").records), "Major Healing Potion, Tough Hunk of Bread", "in the empty place")
+	local _, _, _, x, y = TileFor(bags, 13446):GetPoint(1)
+	check(x == potionX and y == potionY, "where the old potions were")
+	equal(Section(bags, "arrived"), nil, "nothing just added")
+
+	-- No empty place in Trade Goods: the water goes in Just added.
+	Put(client, 0, 13, { id = 7070, count = 2 })
+	equal(Names(Section(bags, "arrived").records), "Elemental Water", "just added")
+	equal(Section(bags, "arrived").money, nil, "no total unless sorting by price")
+	check(Titles(bags):find("Free, Just added$"), "at the very end: " .. Titles(bags))
+	-- An empty place in Just added takes the next one in.
+	Remove(client, 0, 13)
+	equal(Names(Section(bags, "arrived").records), "-", "the water's place stays")
+	Put(client, 0, 14, { id = 4306, count = 3 })
+	equal(Names(Section(bags, "arrived").records), "Silk Cloth", "the silk in it")
+
+	-- Totals count what fills a place: claws sold, a trinket looted.
+	Remove(client, 0, 4)
+	Put(client, 0, 15, { id = 9999 })
+	local junk = Section(bags, "junk")
+	equal(Names(junk.records), "Battered Buckler, Rabbit's Foot, Ruined Pelt, Mystery Trinket", "the trinket where the claws were")
+	equal(junk.money, 80, "3c, 20c, 50c and 7c")
+	NoErrors(client)
+end)
+
+test("full bags: a clam opened gives a slot back, and the free space shows it where it was", function()
+	local client = Start(function(_, state)
+		state.containers[2] = nil -- no quiver: the bags' own slots are all the room there is
+		local backpack, bag = state.containers[0].items, state.containers[1].items
+		backpack[10] = { id = 5523 } -- Small Barnacled Clam
+		bag[2] = { id = 5503, count = 3 } -- Clam Meat
+		for slot = 11, 16 do
+			backpack[slot] = { id = 4306, count = 20 } -- Silk Cloth in all the rest
+		end
+		for slot = 3, 16 do
+			bag[slot] = { id = 4306, count = 20 }
+		end
+	end)
+	local state, ns = client.state, client.ns
+	local bags = OpenBags(client)
+	equal(bags.footer:GetText(), "32/32 slots", "full")
+	local free = FreeTile(bags)
+	equal(free and free.count:GetText(), "0", "the free space shows none")
+	check(free and not ns.Tiles.Secure.Attached(free), "and has no slot to drop on")
+	Mock.Enter(state, free)
+	local text = Plain(client.env.GameTooltip:Text())
+	check(text:find("0 free slots", 1, true) and not text:find("Drop an item", 1, true), "its tooltip says so\n" .. text)
+	local titles, corner, before = Titles(bags), Corner(bags), TilePlaces(bags)
+	before[5523] = nil -- the clam, opened
+	local _, _, _, freeX, freeY = free:GetPoint(1)
+
+	-- The clam goes; its meat lands on the meat already there.
+	state.containers[0].items[10] = nil
+	state.containers[1].items[2] = { id = 5503, count = 4, new = true }
+	Mock.Fire(state, "BAG_UPDATE", 0)
+	Mock.Fire(state, "BAG_UPDATE", 1)
+	Mock.Fire(state, "BAG_UPDATE_DELAYED")
+	Mock.Advance(state, 0.5)
+	equal(Titles(bags), titles, "no section came or went")
+	free = FreeTile(bags)
+	equal(free and free.count:GetText(), "1", "one free slot")
+	local _, _, _, x, y = free:GetPoint(1)
+	check(x == freeX and y == freeY, "where the free space was")
+	local button = ns.Tiles.Secure.Attached(free)
+	check(button and button:GetParent():GetID() == 0 and button:GetID() == 10, "the clam's slot to drop on")
+	Mock.Enter(state, button)
+	text = Plain(client.env.GameTooltip:Text())
+	check(text:find("1 free slots", 1, true) and text:find("Drop an item", 1, true), "its tooltip says so\n" .. text)
+	equal(Gaps(bags), 1, "the clam's place stays")
+	equal(TileFor(bags, 5503).count:GetText(), "4", "the meat on its stack")
+	Unmoved(bags, before, "nothing else moved")
+	equal(Corner(bags), corner, "nor did the window")
+	NoErrors(client)
+end)
+
+test("a title's count or total changing moves nothing beside it", function()
+	local client = Start(function(_, state)
+		state.saved = { settings = { sortMode = "priceHigh" } } -- titles with totals
+	end)
+	local bags = OpenBags(client)
+	local _, equipment = Section(bags, "equipment")
+	local _, consumables = Section(bags, "consumables")
+	local _, _, _, ex, ey = equipment:GetPoint(1)
+	local _, _, _, cx, cy = consumables:GetPoint(1)
+	check(cy == ey and cx > ex, "side by side")
+	local before = TilePlaces(bags)
+	before[12345] = nil
+	Remove(client, 0, 8) -- the sword sold: "Equipment  0", with no total
+	_, consumables = Section(bags, "consumables")
+	local _, _, _, x, y = consumables:GetPoint(1)
+	check(x == cx and y == cy, "Consumables did not move: %s,%s", tostring(x), tostring(y))
+	Unmoved(bags, before, "nor did anything else")
+	NoErrors(client)
+end)
+
+test("the open bags grow downward: nothing shown moves on the screen", function()
+	local client = Start()
+	local state, ns = client.state, client.ns
+	local bags = OpenBags(client)
+	equal((bags:GetPoint(1)), "BOTTOMRIGHT", "placed by the bottom-right corner")
+	equal(bags:GetBottom(), 110, "where it is kept")
+	local corner, height, before = Corner(bags), bags:GetHeight(), TilePlaces(bags)
+	Put(client, 0, 12, { id = 7070, count = 2 }) -- loot: Just added, on a row of its own
+	check(bags:GetHeight() > height, "taller")
+	equal(Corner(bags), corner, "its top-left corner stays")
+	Unmoved(bags, before, "and so does everything in it")
+	-- Just added grows where it is.
+	before = TilePlaces(bags)
+	Put(client, 0, 13, { id = 4306, count = 3 })
+	Put(client, 0, 14, { id = 17029, count = 2 })
+	equal(Names(Section(bags, "arrived").records), "Elemental Water, Silk Cloth, Sacred Candle", "three just added")
+	Unmoved(bags, before, "the water did not move")
+	equal(Corner(bags), corner, "nor did the window")
+	-- Closed and opened again, it is back by its bottom-right corner.
+	OpenBags(client)
+	OpenBags(client)
+	equal((bags:GetPoint(1)), "BOTTOMRIGHT", "by the bottom-right corner again")
+	equal(bags:GetBottom(), 110, "where it was left")
+
+	-- Dragged while it keeps places, it is held where it was dropped.
+	Remove(client, 0, 14)
+	Mock.CallScript(bags, "OnDragStop")
+	corner = Corner(bags)
+	Put(client, 0, 15, { id = 2210 })
+	Put(client, 0, 16, { id = 1411 })
+	equal(Corner(bags), corner, "still")
+
+	-- Near the bottom of the screen it scrolls rather than run off it, where
+	-- the game would push it back up.
+	OpenBags(client) -- closes
+	ns.DB.positions.KnapsackBagsFrame = { "BOTTOMRIGHT", -90, 20 }
+	bags:RestorePosition()
+	OpenBags(client)
+	corner = Corner(bags)
+	for slot = 10, 16 do
+		state.containers[0].items[slot] = { id = 12345 } -- swords: gear is never merged
+	end
+	for slot = 2, 16 do
+		state.containers[1].items[slot] = { id = 12345 }
+	end
+	Mock.Fire(state, "BAG_UPDATE", 0)
+	Mock.Fire(state, "BAG_UPDATE", 1)
+	Mock.Fire(state, "BAG_UPDATE_DELAYED")
+	Mock.Advance(state, 0.5)
+	equal(Shown(Section(bags, "arrived")), 22, "22 swords just added")
+	check(bags.scroll.bar:IsShown(), "scrolling")
+	equal(Corner(bags), corner, "the corner still stays")
 	NoErrors(client)
 end)
 
@@ -1375,15 +1678,34 @@ test("other characters' items show their recorded charges", function()
 	NoErrors(client)
 end)
 
+test("an item's key leaves out who its link was made for", function()
+	local client = Start()
+	local Key = client.ns.Items.Key
+	equal(Key(Mock.Link(2589, nil, 31, 1487)), Key(Mock.Link(2589, nil, 32, 1490)), "another level and specialization")
+	equal(Key(Mock.Link(20749, "Player-4618-00AB97C1")), Key(Mock.Link(20749, "Player-4618-007DCB49")), "another maker")
+	equal(Key("|cffffffff|Hitem:2589::::::::60:1487:::::::::|h[]|h|r"), Key(Mock.Link(2589)), "a name not loaded yet")
+	-- Anniversary's links have a level and no specialization.
+	equal(Key("|cff1eff00|Hitem:23112::::::::70::::::::::|h[Golden Draenite]|h|r"),
+		Key("|cff1eff00|Hitem:23112::::::::65::::::::::|h[Golden Draenite]|h|r"), "Anniversary")
+	check(Key(Mock.Link(2589)) ~= Key(Mock.Link(4306)), "another item")
+	check(Key("|cff1eff00|Hitem:12345:1900:::::::60:1487:::::::::|h[Green Sword of the Monkey]|h|r") ~= Key(Mock.Link(12345)),
+		"an enchanted one")
+	check(Key("|cff1eff00|Hitem:12345::::::-19:600:60:1487:::::::::|h[Green Sword of the Monkey]|h|r") ~= Key(Mock.Link(12345)),
+		"another random suffix")
+	NoErrors(client)
+end)
+
 test("other characters' stacks are merged too", function()
 	local client = Start(function(_, state)
 		state.saved = Other({})
 		state.saved.characters["Aria-Doomhowl"].bags[0].items[3] = { link = Mock.Link(2589), count = 20, quality = 1 }
+		-- One recorded a level earlier: its link names that level.
+		state.saved.characters["Aria-Doomhowl"].bags[0].items[4] = { link = Mock.Link(2589, nil, 41), count = 3, quality = 1 }
 	end)
 	local bags = OpenBags(client)
 	bags:SetOwner("Aria-Doomhowl")
 	equal(TileCount(bags, 2589), 1, "one tile")
-	equal(TileFor(bags, 2589).count:GetText(), "27", "the total")
+	equal(TileFor(bags, 2589).count:GetText(), "30", "the total")
 	-- Her merged tile still shows the item's tooltip.
 	Mock.Enter(client.state, TileFor(bags, 2589))
 	equal(client.env.GameTooltip.item, 2589, "tooltip")
@@ -1822,6 +2144,340 @@ test("items that can still be traded say BoE", function()
 	NoErrors(client)
 end)
 
+--------------------------------------------------------------------------------
+-- Sorting by price
+--------------------------------------------------------------------------------
+
+-- Trade goods: Linen Cloth 20 x 13c = 260c, Silk Cloth 1 + 2 (merged) x 150c =
+-- 450c, Elemental Water 1 x 100c.
+local function Goods(_, state)
+	state.containers[1].items[2] = { id = 4306, count = 1 }
+	state.containers[1].items[3] = { id = 4306, count = 2 }
+	state.containers[1].items[4] = { id = 7070, count = 1 }
+end
+
+test("sorting by price: what a whole stack sells for, most or least first", function()
+	local client = Start(Goods)
+	local bags = OpenBags(client)
+	equal(Names(Section(bags, "tradegoods").records), "Elemental Water, Linen Cloth, Silk Cloth", "by quality")
+	Setting(client, "sortMode", "priceHigh")
+	equal(Names(Section(bags, "tradegoods").records), "Silk Cloth, Linen Cloth, Elemental Water", "most valuable first, merged stacks whole")
+	Setting(client, "sortMode", "priceLow")
+	equal(Names(Section(bags, "tradegoods").records), "Elemental Water, Linen Cloth, Silk Cloth", "least valuable first")
+	Setting(client, "mergeStacks", false)
+	equal(Names(Section(bags, "tradegoods").records), "Elemental Water, Silk Cloth, Linen Cloth, Silk Cloth", "stack by stack: 100, 150, 260, 300")
+	NoErrors(client)
+end)
+
+test("sorting by auction price: Auctionator's, else the vendor price", function()
+	local asked
+	local client = Start(function(env, state)
+		Goods(env, state)
+		env.Auctionator = { API = { v1 = {
+			GetAuctionPriceByItemLink = function(caller, link)
+				asked = caller
+				local id = tonumber(link:match("item:(%d+)"))
+				if id == 2589 then
+					return 1 -- Linen Cloth: 1c each on the auction house
+				elseif id == 4306 then
+					return 400
+				end
+				return nil -- Elemental Water: no auction price known
+			end,
+		} } }
+		state.saved = { settings = { sortMode = "priceHigh", priceSource = "auction" } }
+	end)
+	local bags = OpenBags(client)
+	equal(Names(Section(bags, "tradegoods").records), "Silk Cloth, Elemental Water, Linen Cloth", "silk 1200, water 100 (vendor), linen 20")
+	equal(asked, "Knapsack", "Auctionator is told who asks")
+	Setting(client, "priceSource", "vendor")
+	equal(Names(Section(bags, "tradegoods").records), "Silk Cloth, Linen Cloth, Elemental Water", "vendor prices again")
+	NoErrors(client)
+end)
+
+test("sorting by auction price: TradeSkillMaster's market value", function()
+	local sources = {}
+	local client = Start(function(env, state)
+		Goods(env, state)
+		env.TSM_API = {
+			ToItemString = function(link)
+				return "i:" .. link:match("item:(%d+)")
+			end,
+			GetCustomPriceValue = function(source, itemString)
+				sources[#sources + 1] = source
+				return itemString == "i:7070" and 9999 or nil
+			end,
+		}
+		state.saved = { settings = { sortMode = "priceHigh", priceSource = "auction" } }
+	end)
+	local bags = OpenBags(client)
+	equal(Names(Section(bags, "tradegoods").records), "Elemental Water, Silk Cloth, Linen Cloth", "water at its market value first")
+	equal(sources[1], "DBMarket", "the market value")
+	equal(client.ns.Items.AuctionSource(), "TradeSkillMaster", "named in the options")
+	NoErrors(client)
+end)
+
+test("sorting by price: each item shows its price, each title its total", function()
+	local client = Start(function(env, state)
+		Goods(env, state)
+		state.containers[1].items[6] = { id = 17029, count = 2, new = true } -- Sacred Candles, 37c each
+		state.saved = { settings = { sortMode = "priceHigh" } }
+	end)
+	local bags = OpenBags(client)
+	equal(Section(bags, "new").money, 74, "the New section has its total")
+	equal(Plain(TileFor(bags, 17029).value:GetText()), "74c", "and its items their prices")
+	local goods, title = Section(bags, "tradegoods")
+	equal(Plain(TileFor(bags, 4306).value:GetText()), "4s", "silk: 3 x 150c, merged")
+	equal(Plain(TileFor(bags, 2589).value:GetText()), "2s", "linen: 20 x 13c")
+	equal(Plain(TileFor(bags, 7070).value:GetText()), "1s", "water")
+	equal(goods.money, 810, "what the trade goods are worth together")
+	check(title.text:GetText():find("0g 8s 10c", 1, true), "in the title: " .. tostring(title.text:GetText()))
+	equal(Section(bags, "consumables").money, 29, "potions 25c and bread 4c")
+	equal(TileFor(bags, 6948).value:GetText(), "", "no price on what sells for nothing")
+	local _, misc = Section(bags, "misc")
+	check(not misc.text:GetText():find("0g", 1, true), "nor a total of nothing: " .. misc.text:GetText())
+	equal(Section(bags, "junk").money, 178, "junk keeps its vendor value")
+	-- The sword's price takes the corner of its BoE mark, which moves up.
+	local sword = TileFor(bags, 12345)
+	equal(Plain(sword.value:GetText()), "10s", "the sword's price")
+	equal(sword.bind:GetText(), "BoE", "BoE")
+	equal((sword.bind:GetPoint(1)), "TOPRIGHT", "top right")
+
+	Setting(client, "priceText", false)
+	equal(TileFor(bags, 2589).value:GetText(), "", "prices can be hidden")
+	equal(TileFor(bags, 12345).value:GetText(), "BoE", "BoE back in its corner")
+	equal(TileFor(bags, 12345).bind:GetText(), "", "and only there")
+	equal(Section(bags, "tradegoods").money, 810, "the totals stay")
+
+	Setting(client, "priceText", true)
+	Setting(client, "sortMode", "quality")
+	equal(TileFor(bags, 2589).value:GetText(), "", "no prices when not sorting by price")
+	equal(Section(bags, "tradegoods").money, nil, "nor totals")
+	equal(Section(bags, "junk").money, 178, "but junk's")
+	NoErrors(client)
+end)
+
+test("sorting by price: BoE goes beside a quest mark", function()
+	local client = Start(function(_, state)
+		-- A BoE sword that starts a quest.
+		state.containers[1].items[5] = { id = 12345, quest = true, questID = 124, questActive = false }
+		state.saved = { settings = { sortMode = "priceHigh" } }
+	end)
+	local bags = OpenBags(client)
+	local starter
+	for _, tile in ipairs(bags.tiles) do
+		if tile.record and tile.record.itemID == 12345 and tile.record.questStarter then
+			starter = tile
+		end
+	end
+	check(starter and starter.quest:IsShown(), "the quest mark")
+	equal(starter.bind:GetText(), "BoE", "BoE")
+	local _, relativeTo, relativePoint = starter.bind:GetPoint(1)
+	check(relativeTo == starter.quest and relativePoint == "TOPLEFT", "beside the quest mark")
+	NoErrors(client)
+end)
+
+test("sorting by auction price: the price used is shown; the tooltip says when it is the vendor's", function()
+	local client = Start(function(env, state)
+		Goods(env, state)
+		env.Auctionator = { API = { v1 = {
+			GetAuctionPriceByItemLink = function(_, link)
+				local id = tonumber(link:match("item:(%d+)"))
+				if id == 2589 then
+					return 1 -- Linen Cloth
+				elseif id == 4306 then
+					return 400 -- Silk Cloth
+				elseif id == 5635 then
+					return 1000 -- Sharp Claw, junk
+				end
+				return nil -- Elemental Water: none known
+			end,
+		} } }
+		state.saved = { settings = { sortMode = "priceHigh", priceSource = "auction" } }
+	end)
+	local state, env, ns = client.state, client.env, client.ns
+	local bags = OpenBags(client)
+	equal(Plain(TileFor(bags, 4306).value:GetText()), "12s", "silk at auction: 3 x 400c")
+	equal(Plain(TileFor(bags, 2589).value:GetText()), "20c", "linen at auction: 20 x 1c")
+	equal(Plain(TileFor(bags, 7070).value:GetText()), "1s", "water at its vendor price")
+	equal(Section(bags, "tradegoods").money, 1320, "the total of the prices used")
+	local function Tooltip(id)
+		Mock.Enter(state, ns.Tiles.Secure.Attached(TileFor(bags, id)))
+		return Plain(env.GameTooltip:Text())
+	end
+	check(Tooltip(7070):find("Sorted by its vendor price: Auctionator has no auction price for it.", 1, true), "the water's tooltip says why: " .. Tooltip(7070))
+	check(not Tooltip(4306):find("Sorted by", 1, true), "the silk's says nothing")
+
+	-- Junk keeps its vendor value, unless it is sorted by price too.
+	equal(Plain(TileFor(bags, 5635).value:GetText()), "1s", "junk: its vendor value, 3 x 35c")
+	check(not Tooltip(4865):find("Sorted by", 1, true), "junk sorted by vendor value says nothing, auction price or not")
+	Setting(client, "junkByValue", false)
+	equal(Plain(TileFor(bags, 5635).value:GetText()), "30s", "junk sorted by price: its auction price")
+	equal(Section(bags, "junk").money, 3000 + 50 + 20 + 3, "and the total of the prices used")
+
+	Setting(client, "priceSource", "vendor")
+	check(not Tooltip(7070):find("Sorted by", 1, true), "sorting by vendor price says nothing")
+
+	-- No auction addon at all.
+	local other = Start(function(_, otherState)
+		otherState.saved = { settings = { sortMode = "priceHigh", priceSource = "auction" } }
+	end)
+	local otherBags = OpenBags(other)
+	Mock.Enter(other.state, other.ns.Tiles.Secure.Attached(TileFor(otherBags, 2589)))
+	check(Plain(other.env.GameTooltip:Text()):find("Sorted by its vendor price: no auction addon is installed.", 1, true), "says there is none")
+	equal(Plain(TileFor(otherBags, 2589).value:GetText()), "2s", "and shows the vendor price")
+	NoErrors(client)
+	NoErrors(other)
+end)
+
+test("sorting by price: totals follow what is left while the bags stay open", function()
+	local client = Start(function(env, state)
+		Goods(env, state)
+		state.saved = { settings = { sortMode = "priceHigh" } }
+	end)
+	local bags = OpenBags(client)
+	equal(Section(bags, "tradegoods").money, 810, "before")
+	Remove(client, 0, 2) -- the linen, sold
+	local goods, title = Section(bags, "tradegoods")
+	equal(Names(goods.records), "Silk Cloth, -, Elemental Water", "its place stays")
+	equal(goods.money, 550, "the total of what is left")
+	check(title.text:GetText():find("0g 5s 50c", 1, true), "in the title: " .. tostring(title.text:GetText()))
+	-- Loot lands on the water: new now, but it stays, and counts, in its place.
+	Put(client, 1, 4, { id = 7070, count = 3, new = true })
+	goods = Section(bags, "tradegoods")
+	equal(Names(goods.records), "Silk Cloth, -, Elemental Water", "the water stays put")
+	equal(goods.money, 750, "silk 450c and water now 300c")
+	Put(client, 0, 12, { id = 17029, count = 2 }) -- two Sacred Candles, 37c each
+	local arrived = Section(bags, "arrived")
+	equal(Names(arrived.records), "Sacred Candle", "just added")
+	equal(arrived.money, 74, "with a total too")
+	equal(Plain(TileFor(bags, 17029).value:GetText()), "74c", "and its price")
+	-- The sword, with its price and BoE mark, sold: its gap shows neither.
+	Remove(client, 0, 8)
+	for _, tile in ipairs(bags.tiles) do
+		if tile.gap or tile.free then
+			equal(tile.bind:GetText(), "", "no BoE on an empty place")
+			equal(tile.value:GetText(), "", "nor a price")
+		end
+	end
+	NoErrors(client)
+end)
+
+test("Find shows prices and each place's total while sorting by price", function()
+	local client = Start(function(_, state)
+		state.saved = Other({ settings = { sortMode = "priceHigh" } })
+	end)
+	local state, env, ns = client.state, client.env, client.ns
+	env.SlashCmdList.KNAPSACK("find Linen")
+	Mock.Advance(state, 0.5)
+	local find = ns.find
+	local places = {}
+	for i, title in ipairs(find.titles) do
+		places[i] = Plain(title.section.title) .. " " .. tostring(title.section.money)
+	end
+	equal(table.concat(places, "; "), "Vedek: bags 260; Aria: bags 91; Aria: bank 520", "each place's linen")
+	equal(Plain(TileFor(find, 2589).value:GetText()), "2s", "with its price")
+	NoErrors(client)
+end)
+
+test("short money: thousands of gold fit the corner", function()
+	local C = Start().ns.C
+	equal(Plain(C.ShortMoney(9999999)), "999g", "999 gold")
+	equal(Plain(C.ShortMoney(10000000)), "1k", "1000 gold")
+	equal(Plain(C.ShortMoney(15990000)), "1.5k", "1599 gold, never rounded up")
+	equal(Plain(C.ShortMoney(123450000)), "12k", "12345 gold")
+	equal(Plain(C.ShortMoney(150)), "1s", "silver")
+end)
+
+--------------------------------------------------------------------------------
+-- Gear the character has worn
+--------------------------------------------------------------------------------
+
+local function WornTiles(window)
+	local names = {}
+	for _, tile in ipairs(window.tiles) do
+		if tile.record and tile.worn:IsShown() then
+			names[#names + 1] = tile.record.info.name
+		end
+	end
+	table.sort(names)
+	return table.concat(names, ", ")
+end
+
+test("gear the character has worn is marked; gear it only picked up is not", function()
+	local client = Start(function(_, state)
+		state.containers[1].items[5] = { id = 10205 } -- a helm, picked up
+		state.containers[1].items[6] = { id = 12345 } -- a second green sword, never worn
+	end)
+	local state, env, ns = client.state, client.env, client.ns
+	local bags = OpenBags(client)
+	equal(WornTiles(bags), "", "nothing worn yet")
+
+	-- The first sword goes on and comes off again.
+	Mock.Equip(state, 0, 8, 16)
+	Mock.Advance(state, 0.5)
+	Mock.Unequip(state, 16, 0, 8)
+	Mock.Advance(state, 0.5)
+	equal(WornTiles(bags), "Green Sword of the Monkey", "the sword it wore")
+	local swords = 0
+	for _, tile in ipairs(bags.tiles) do
+		if tile.record and tile.record.itemID == 12345 then
+			swords = swords + 1
+		end
+	end
+	equal(swords, 2, "two swords, told apart: the other was never worn")
+	check(env.KnapsackDB.characters["Vedek-Doomhowl"].bags[0].items[8].worn, "recorded, for other characters to see")
+	check(next(env.KnapsackDB.characters["Vedek-Doomhowl"].worn), "the worn gear is remembered")
+
+	-- Its tooltip says what the check means.
+	local worn
+	for _, tile in ipairs(bags.tiles) do
+		if tile.worn:IsShown() then
+			worn = tile
+		end
+	end
+	Mock.Enter(state, ns.Tiles.Secure.Attached(worn))
+	check(Plain(env.GameTooltip:Text()):find("You have worn this.", 1, true), "tooltip: " .. Plain(env.GameTooltip:Text()))
+
+	-- Search keywords.
+	bags:SetSearch("worn")
+	equal(Lit(bags), "Green Sword of the Monkey", "worn")
+	bags:SetSearch("unworn")
+	equal(Lit(bags), "Battered Buckler, Green Sword of the Monkey, Thick Plate Helm", "gear never worn: the other sword, the helm and the grey shield")
+	bags:SetSearch("")
+
+	-- A category for gear to get rid of.
+	local key = ns.Categories.AddCustom("Gear to sell", { worn = "unworn" })
+	Mock.Advance(state, 0.2)
+	equal(Names(Section(bags, key).records), "Green Sword of the Monkey, Thick Plate Helm, Battered Buckler", "the gear never worn, grey gear included")
+	equal(Names(Section(bags, "equipment").records), "Green Sword of the Monkey", "the worn sword stays in Equipment")
+
+	Setting(client, "wornMarker", false)
+	equal(WornTiles(bags), "", "the mark can be turned off")
+	NoErrors(client)
+end)
+
+test("worn: gear on at login, equipment sets, and gear not seen for a year", function()
+	local client = Start(function(_, state)
+		state.equipped[1] = { id = 10205 } -- the helm, on at login
+		state.containers[1].items[5] = { id = 16060, inSet = "Fishing" } -- a shirt in an equipment set
+		state.saved = { characters = { ["Vedek-Doomhowl"] = { name = "Vedek", worn = {
+			["Item-4618-0-OLD"] = 1790000000 - 400 * 86400,
+			["Item-4618-0-RECENT"] = 1790000000 - 10 * 86400,
+		} } } }
+	end)
+	local state, env = client.state, client.env
+	local bags = OpenBags(client)
+	equal(WornTiles(bags), "Common White Shirt", "gear in an equipment set counts as worn")
+	Mock.Unequip(state, 1, 1, 6)
+	Mock.Advance(state, 0.5)
+	equal(WornTiles(bags), "Common White Shirt, Thick Plate Helm", "the helm it had on at login, now taken off")
+	local worn = env.KnapsackDB.characters["Vedek-Doomhowl"].worn
+	equal(worn["Item-4618-0-OLD"], nil, "gear not seen for a year is forgotten")
+	check(worn["Item-4618-0-RECENT"], "the rest is kept")
+	NoErrors(client)
+end)
+
 test("new items go first until the bags close", function()
 	local client = Start(function(_, state)
 		state.containers[0].items[2].new = true -- Linen Cloth
@@ -1885,7 +2541,7 @@ test("a whole category into the bank and back out", function()
 	check(entry, "and out again from the bank window")
 	entry.callback()
 	Settle(client)
-	check(Shown(Section(bags, "tradegoods")) > 0, "back in the bags")
+	check(Shown(Section(bags, "arrived")) > 0, "back in the bags, under Just added while they stay open")
 	for _, item in pairs(state.containers[2].items) do
 		equal(item.id, 2512, "nothing but arrows in the quiver")
 	end
@@ -2601,7 +3257,7 @@ test("Classic: a whole category into the bank and back out", function()
 	Settle(client)
 	local left = state.containers[-1].items
 	check(not left[1] and not left[2] and not left[3], "out of the bank's own slots")
-	check(Shown(Section(bags, "tradegoods")) > 0, "back in the bags")
+	check(Shown(Section(bags, "arrived")) > 0, "back in the bags, under Just added while they stay open")
 	NoErrors(client)
 end)
 
@@ -2729,6 +3385,19 @@ test("Classic: the mailbox is read through the game's tooltip lines too", functi
 	Mock.Fire(client.state, "MAIL_CLOSED")
 	local mail = client.env.KnapsackDB.characters["Vedek-Doomhowl"].mail
 	equal(mail and mail.mails[1].items[1].charges, 2, "charges of mailed items")
+	NoErrors(client)
+end)
+
+test("Classic: worn gear is marked too (no equipment sets there)", function()
+	local client = StartClassic()
+	local state = client.state
+	local bags = OpenBags(client)
+	Mock.Equip(state, 0, 8, 16)
+	Mock.Advance(state, 0.5)
+	Mock.Unequip(state, 16, 0, 8)
+	Mock.Advance(state, 0.5)
+	check(TileFor(bags, 12345).worn:IsShown(), "the sword it wore")
+	check(not TileFor(bags, 2210).worn:IsShown(), "the shield it did not")
 	NoErrors(client)
 end)
 

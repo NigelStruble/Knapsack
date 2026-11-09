@@ -16,10 +16,11 @@ local L, DB = ns.L, ns.DB
 --   order   category keys, in display order
 --   hidden  [key] = true
 --   names   [key] = new name, for renamed categories
---   custom  [key] = { name, quality, class, text, bind }; rules left out match
---           anything, a category without rules only holds items dragged into it.
---           bind: "boe" and "bou" (Bind on Equip / on Use, not bound yet),
---           "bound" (soulbound) or "unbound"
+--   custom  [key] = { name, quality, class, text, bind, worn }; rules left out
+--           match anything, a category without rules only holds items dragged
+--           into it. bind: "boe" and "bou" (Bind on Equip / on Use, not bound
+--           yet), "bound" (soulbound) or "unbound". worn: "worn" (gear the
+--           character has had on) or "unworn" (gear it has only picked up)
 --   items   [itemID] = key, items dragged into a category
 --   nextID  number for the next custom category key
 
@@ -239,7 +240,8 @@ function Categories.Move(key, delta)
 	end
 end
 
--- rules: { quality = n, class = n, text = "...", bind = "boe" }, each optional.
+-- rules: { quality = n, class = n, text = "...", bind = "boe", worn = "unworn" },
+-- each optional.
 function Categories.AddCustom(name, rules)
 	local state = State()
 	local key = "custom" .. state.nextID
@@ -275,6 +277,7 @@ function Categories.SetRules(key, rules)
 	custom.quality = rules.quality
 	custom.class = rules.class
 	custom.bind = rules.bind
+	custom.worn = rules.worn
 	local text = rules.text
 	custom.text = (type(text) == "string" and text ~= "") and text or nil
 	Changed()
@@ -350,9 +353,24 @@ function Categories.HasBinding(bind, rec, info)
 	return true
 end
 
+-- Whether an item is gear the character has worn ("worn") or only picked up
+-- ("unworn"): rec.worn is set for worn gear (see Scanner.lua). Anything that
+-- is not gear is neither.
+function Categories.HasWorn(worn, rec, info)
+	if not info.isGear then
+		return false
+	end
+	if worn == "worn" then
+		return rec.worn == true
+	elseif worn == "unworn" then
+		return not rec.worn
+	end
+	return true
+end
+
 local function Matches(rule, quality, info, rec)
 	local text = rule.text
-	if rule.quality == nil and rule.class == nil and not text and rule.bind == nil then
+	if rule.quality == nil and rule.class == nil and not text and rule.bind == nil and rule.worn == nil then
 		return false -- no rules: only items dragged into it
 	end
 	if rule.quality ~= nil and quality ~= rule.quality then
@@ -365,6 +383,9 @@ local function Matches(rule, quality, info, rec)
 		return false
 	end
 	if rule.bind ~= nil and not Categories.HasBinding(rule.bind, rec, info) then
+		return false
+	end
+	if rule.worn ~= nil and not Categories.HasWorn(rule.worn, rec, info) then
 		return false
 	end
 	return true
@@ -427,6 +448,14 @@ function Categories.BindChoices()
 		{ value = "bou", text = L["Bind on Use, not bound yet"] },
 		{ value = "bound", text = L["Soulbound"] },
 		{ value = "unbound", text = L["Not soulbound"], tooltip = L["Anything that can still be traded, including items that never bind."] },
+	}
+end
+
+function Categories.WornChoices()
+	return {
+		{ value = false, text = L["Any"] },
+		{ value = "worn", text = L["Gear you have worn"], tooltip = L["Gear your character has had on, or that is in one of your equipment sets."] },
+		{ value = "unworn", text = L["Gear you have not worn"], tooltip = L["Gear your character only picked up: what to sell or give away."] },
 	}
 end
 

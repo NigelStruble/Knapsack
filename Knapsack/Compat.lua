@@ -404,6 +404,48 @@ function C.DetailedItemLevel(link)
 	return nil
 end
 
+-- An item's GUID: every item has its own, which stays with it wherever it
+-- goes, so two of the same sword can be told apart. Nil where the client
+-- cannot say. create: the ItemLocation constructor to use.
+local function ItemGUID(create, ...)
+	local location = _G.ItemLocation
+	local get = Item and Item.GetItemGUID
+	if not (location and location[create] and get) then
+		return nil
+	end
+	local made, where = pcall(location[create], location, ...)
+	if not made or not where then
+		return nil
+	end
+	local ok, guid = pcall(get, where)
+	return ok and C.Clean(guid) or nil
+end
+
+-- The GUID of the item in a bag slot.
+function C.BagItemGUID(bag, slot)
+	return ItemGUID("CreateFromBagAndSlot", bag, slot)
+end
+
+-- The GUID of the item worn in an equipment slot (1 head ... 19 tabard), or
+-- nil for an empty slot.
+function C.EquippedItemGUID(slot)
+	if not C.Clean(GetInventoryItemLink("player", slot)) then
+		return nil
+	end
+	return ItemGUID("CreateFromEquipmentSlot", slot)
+end
+
+-- Whether the item in a bag slot is in one of the game's equipment sets (the
+-- Retail engine's equipment manager; Classic clients have none).
+function C.InEquipmentSet(bag, slot)
+	local get = Container.GetContainerItemEquipmentSetInfo
+	if not get then
+		return false
+	end
+	local ok, inSet = pcall(get, bag, slot)
+	return ok and C.Clean(inSet) == true
+end
+
 -- The spell an item casts when used (name, spellID), or nil.
 function C.ItemSpell(item)
 	local get = (Item and Item.GetItemSpell) or _G.GetItemSpell
@@ -655,12 +697,20 @@ function C.Money(copper)
 end
 
 local GOLD, SILVER, COPPER = "|cffffd100%dg|r", "|cffc7c7cf%ds|r", "|cffeda55f%dc|r"
+local THOUSANDS = "|cffffd100%sk|r" -- thousands of gold
 
--- Only the largest coin, for the corner of an item tile: "12g", "34s", "56c".
+-- Only the largest coin, for the corner of an item tile: "12g", "34s", "56c";
+-- thousands of gold as "1.5k" and "12k".
 function C.ShortMoney(copper)
 	copper = floor(copper or 0)
-	if copper >= 10000 then
-		return format(GOLD, floor(copper / 10000))
+	local gold = floor(copper / 10000)
+	if gold >= 10000 then
+		return format(THOUSANDS, floor(gold / 1000))
+	elseif gold >= 1000 then
+		local text = format("%.1f", floor(gold / 100) / 10):gsub("%.0$", "")
+		return format(THOUSANDS, text)
+	elseif gold >= 1 then
+		return format(GOLD, gold)
 	elseif copper >= 100 then
 		return format(SILVER, floor(copper / 100))
 	end

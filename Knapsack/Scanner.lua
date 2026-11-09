@@ -7,8 +7,8 @@ local C, DB = ns.C, ns.DB
 --
 -- A container snapshot:
 --   { size = 16, family = 0, items = { [slot] = { link = "...", count = 5, quality = 1 } } }
--- Items with charges also have .charges, the number left, and soulbound items
--- .bound.
+-- Items with charges also have .charges, the number left, soulbound items
+-- .bound, and gear the character has worn .worn (see below).
 -- A character stores .bags and .bank as [bagID] = container (containers have
 -- .name, bags and Classic bank bags also the .link of the bag itself, bank
 -- tabs an .icon), plus .bagsTime and .bankTime, and on Classic .bankBagSlots,
@@ -24,6 +24,40 @@ local ipairs, pairs, next, wipe, time, sort = ipairs, pairs, next, wipe, time, t
 local tremove = table.remove
 
 --------------------------------------------------------------------------------
+-- Gear the character has worn
+--------------------------------------------------------------------------------
+
+-- Gear counts as worn once the character has had it on: the GUID of each item
+-- in its equipment slots is noted, at login and whenever its gear changes, in
+-- char.worn[guid] = when last seen. Gear in one of the game's equipment sets
+-- counts too. Gear never worn is what the character only picked up. Items
+-- not seen for a year are forgotten.
+local WORN_KEEP = 365 * 86400
+
+local function WornList()
+	local char = DB.PlayerCharacter()
+	if not char then
+		return nil
+	end
+	char.worn = char.worn or {}
+	return char.worn
+end
+
+-- Whether the item in a bag slot is gear the character has worn. worn: from
+-- WornList.
+local function Worn(worn, bag, slot, link, itemID)
+	if not ns.Items.Get(link, itemID).isGear then
+		return nil
+	end
+	local guid = worn and C.BagItemGUID(bag, slot)
+	if guid and worn[guid] then
+		worn[guid] = time() -- still around: kept another year
+		return true
+	end
+	return C.InEquipmentSet(bag, slot) or nil
+end
+
+--------------------------------------------------------------------------------
 -- Reading containers
 --------------------------------------------------------------------------------
 
@@ -32,6 +66,7 @@ local tremove = table.remove
 local function ReadContainer(bag, extra)
 	local size = C.NumSlots(bag)
 	local container = { size = size, family = size > 0 and C.BagFamily(bag) or 0, items = {} }
+	local worn = size > 0 and WornList()
 	if size > 0 then
 		container.name = C.Clean(C.BagName(bag))
 		container.link = C.BagLink(bag) -- the bag itself, if it is one worn in a slot
@@ -43,6 +78,7 @@ local function ReadContainer(bag, extra)
 			local item = { link = link, count = info.stackCount or 1, quality = C.Clean(info.quality) }
 			item.charges = ns.Items.Charges(link, info.itemID, C.BagTooltip, bag, slot)
 			item.bound = C.Clean(info.isBound) and true or nil -- soulbound, so not Bind on Equip any more
+			item.worn = Worn(worn, bag, slot, link, info.itemID)
 			if extra then
 				item.itemID = info.itemID
 				item.icon = info.iconFileID
@@ -76,7 +112,7 @@ local function Strip(containers)
 	for bag, container in pairs(containers) do
 		local items = {}
 		for slot, item in pairs(container.items) do
-			items[slot] = { link = item.link, count = item.count, quality = item.quality, charges = item.charges, bound = item.bound }
+			items[slot] = { link = item.link, count = item.count, quality = item.quality, charges = item.charges, bound = item.bound, worn = item.worn }
 		end
 		copy[bag] = {
 			size = container.size,
@@ -105,6 +141,7 @@ function Scanner.Records(containers, live)
 				quality = item.quality,
 				charges = item.charges,
 				bound = item.bound,
+				worn = item.worn,
 				itemID = item.itemID,
 				icon = item.icon,
 				bag = bag,
@@ -138,9 +175,12 @@ end
 
 -- Used and total slots of normal bags, and the free slots of each bag family:
 -- free[family] = { count, bag, slot, name, family } where bag and slot are the
--- first free one and name is that bag's name. The Classic keyring is left out:
--- it grows by four slots whenever it fills up, so it always has a few free
--- ones, which are not room anything else can use.
+-- first free one and name is that bag's name. Every family the bags have is
+-- there, a full one with count 0 and no bag or slot (named after its first
+-- bag), so the free space does not come and go as the bags fill up and empty
+-- (see Window.lua: keeping places). The Classic keyring is left out: it grows
+-- by four slots whenever it fills up, so it always has a few free ones, which
+-- are not room anything else can use.
 function Scanner.Space(containers)
 	local used, total, free = 0, 0, {}
 	local bags = {}
@@ -153,16 +193,19 @@ function Scanner.Space(containers)
 	for _, bag in ipairs(bags) do
 		local container = containers[bag]
 		local family = container.family or 0
+		local entry = free[family]
+		if not entry then
+			entry = { count = 0, name = container.name, family = family }
+			free[family] = entry
+		end
 		for slot = 1, container.size or 0 do
 			if container.items[slot] then
 				if family == 0 then
 					used = used + 1
 				end
 			else
-				local entry = free[family]
-				if not entry then
-					entry = { count = 0, bag = bag, slot = slot, name = container.name, family = family }
-					free[family] = entry
+				if entry.count == 0 then
+					entry.bag, entry.slot, entry.name = bag, slot, container.name
 				end
 				entry.count = entry.count + 1
 			end
@@ -518,13 +561,64 @@ local function GuildSlotsChanged()
 end
 
 --------------------------------------------------------------------------------
+-- Noting the gear worn
+--------------------------------------------------------------------------------
+
+-- Notes the GUIDs of the gear the character has on. If any is new, the bags
+-- and bank are read again, so it shows as worn once it is taken off.
+local function NoteEquipped()
+	local worn = inWorld and WornList()
+	if not worn then
+		return
+	end
+	local now, added = time(), false
+	for slot = _G.INVSLOT_FIRST_EQUIPPED or 1, _G.INVSLOT_LAST_EQUIPPED or 19 do
+		local guid = C.EquippedItemGUID(slot)
+		if guid then
+			added = added or not worn[guid]
+			worn[guid] = now
+		end
+	end
+	if added then
+		Scanner.BagsChanged()
+		if bankOpen then
+			QueueBank()
+		end
+	end
+end
+
+-- Forgets gear not seen for a year.
+local function PruneWorn()
+	local worn = WornList()
+	local oldest = time() - WORN_KEEP
+	for guid, seen in pairs(worn or {}) do
+		if type(seen) ~= "number" or seen < oldest then
+			worn[guid] = nil
+		end
+	end
+end
+
+--------------------------------------------------------------------------------
 -- Events
 --------------------------------------------------------------------------------
 
 C.On("PLAYER_ENTERING_WORLD", function()
 	inWorld = true
 	DB.UpdatePlayerInfo()
+	PruneWorn()
+	NoteEquipped()
 	Scanner.BagsChanged()
+end)
+
+-- Gear put on or taken off.
+C.On("PLAYER_EQUIPMENT_CHANGED", C.Debounce(0.2, NoteEquipped))
+
+-- An equipment set saved, changed or deleted: whose gear counts as worn.
+C.On("EQUIPMENT_SETS_CHANGED", function()
+	Scanner.BagsChanged()
+	if bankOpen then
+		QueueBank()
+	end
 end)
 
 C.On("PLAYER_LEAVING_WORLD", function()

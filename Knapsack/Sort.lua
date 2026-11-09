@@ -9,6 +9,9 @@ local _, ns = ...
 --   sortClass    item class, sortSub subclass (99 while unknown)
 --   count        stack size
 --   value        vendor value of the whole stack, or nil while unknown
+--   price        what the whole stack is worth, by the vendor or auction
+--                price as the options say (only for the price orders), or
+--                nil while unknown
 --   position     bag * 1000 + slot (tab * 1000 + slot in the guild vault)
 --   expires      when a mail goes back or is deleted (mail only)
 
@@ -87,6 +90,33 @@ COMPARE.value = function(a, b)
 	return Tail(a, b)
 end
 
+-- What a stack is worth, the most or the least first; items whose price is not
+-- known yet go last. Equal prices fall back to the quality order.
+local function ByPrice(most)
+	return function(a, b)
+		local pa, pb = a.price, b.price
+		if pa ~= pb then
+			if pa == nil then
+				return false
+			elseif pb == nil then
+				return true
+			end
+			if most then
+				return pa > pb
+			end
+			return pa < pb
+		end
+		return COMPARE.quality(a, b)
+	end
+end
+COMPARE.priceHigh = ByPrice(true)
+COMPARE.priceLow = ByPrice(false)
+
+-- Whether an order needs the price field.
+function Sort.ByPrice(mode)
+	return mode == "priceHigh" or mode == "priceLow"
+end
+
 -- Guild vault tabs keep the order the guild arranged them in.
 COMPARE.position = function(a, b)
 	return a.position < b.position
@@ -101,7 +131,7 @@ COMPARE.expires = function(a, b)
 	return COMPARE.quality(a, b)
 end
 
-Sort.MODES = { "quality", "name", "type" }
+Sort.MODES = { "quality", "name", "type", "priceHigh", "priceLow" }
 
 function Sort.Items(list, mode)
 	sort(list, COMPARE[mode] or COMPARE.quality)

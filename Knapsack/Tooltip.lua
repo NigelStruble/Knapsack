@@ -6,7 +6,8 @@ local L, C, DB = ns.L, ns.C, ns.DB
 --   Vedek        25 (bags 20, bank 3, mail 2)
 --   Knights      40 (guild vault)
 -- and, for items shown in Knapsack's windows, the charges and mail details the
--- game's own tooltip leaves out.
+-- game's own tooltip leaves out, whether the character has worn the gear, and
+-- when sorting by auction price fell back on the vendor price.
 
 local Tooltip = {}
 ns.Tooltip = Tooltip
@@ -195,6 +196,28 @@ local function AddCharges(tooltip)
 	end
 end
 
+-- Gear the character has worn (see Scanner.lua): what the check on its tile
+-- means.
+local function AddWorn(tooltip)
+	local rec = ns.Tiles.RecordFor(tooltip:GetOwner())
+	if rec and rec.worn then
+		tooltip:AddLine(L["You have worn this."], 0.45, 0.8, 1)
+	end
+end
+
+-- While sorting by auction price, an item with no auction price known is
+-- sorted, and priced on its tile, by its vendor price: says so, and why.
+local function AddPrice(tooltip)
+	local rec = ns.Tiles.RecordFor(tooltip:GetOwner())
+	if not (rec and rec.priced and rec.priceSource == "vendor" and DB.settings.priceSource == "auction") then
+		return
+	end
+	local source = ns.Items.AuctionSource()
+	local text = source and format(L["Sorted by its vendor price: %s has no auction price for it."], source)
+		or L["Sorted by its vendor price: no auction addon is installed."]
+	tooltip:AddLine(text, 0.6, 0.6, 0.6, true)
+end
+
 -- Who a mail item is from, and when it goes back.
 local function AddMail(tooltip)
 	local rec = ns.Tiles.RecordFor(tooltip:GetOwner())
@@ -253,6 +276,8 @@ function Tooltip.Start()
 			return -- not Knapsack's own scanning tooltip, nor anyone else's
 		end
 		pcall(AddCharges, tooltip)
+		pcall(AddWorn, tooltip)
+		pcall(AddPrice, tooltip)
 		pcall(AddMail, tooltip)
 		if DB.settings.tooltipCounts and itemID then
 			pcall(AddLines, tooltip, itemID)

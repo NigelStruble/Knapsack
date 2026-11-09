@@ -84,7 +84,13 @@ local prototype = {}
 --------------------------------------------------------------------------------
 
 -- Fills in what sorting and drawing need (see Sort.lua for the sort fields).
+-- The price, for the price orders, is the auction price where the options ask
+-- for it and an auction addon knows one, and the vendor price otherwise;
+-- rec.priceSource says which ("auction" or "vendor").
 local function Prepare(records)
+	local settings = DB.settings
+	local byPrice = Sort.ByPrice(settings.sortMode)
+	local auction = byPrice and settings.priceSource == "auction"
 	for _, rec in ipairs(records) do
 		local info = Items.Get(rec.link, rec.itemID)
 		rec.info = info
@@ -98,6 +104,15 @@ local function Prepare(records)
 			rec.value = (info.sellPrice or 0) * rec.count
 		else
 			rec.value = nil
+		end
+		if byPrice then
+			local each = auction and Items.AuctionPrice(rec.link) or nil
+			local source = each and "auction" or nil
+			if not each and info.complete then
+				each, source = info.sellPrice or 0, "vendor"
+			end
+			rec.unitPrice, rec.priceSource = each, source
+			rec.price = each and each * rec.count or nil
 		end
 	end
 end
@@ -113,10 +128,10 @@ local function Mergeable(rec)
 	return not rec.info.isGear
 end
 
--- Items that are the same apart from who made them (Wizard Oils from two
--- enchanters) merge: the maker is in the link, as a player GUID.
+-- Stacks of the same item merge, whoever made them (Wizard Oils from two
+-- enchanters) and at whatever level they were recorded (see Items.Key).
 local function MergeKey(rec)
-	return (rec.link:gsub("Player%-%d+%-%x+", ""))
+	return Items.Key(rec.link)
 end
 
 -- The tile of merged stacks is the stack that should be used up first, with
@@ -177,6 +192,9 @@ local function Merge(records)
 			if first.value then
 				first.value = (first.info.sellPrice or 0) * total
 			end
+			if first.unitPrice then
+				first.price = first.unitPrice * total
+			end
 			merged[i] = first
 		end
 	end
@@ -191,11 +209,40 @@ local function Merging(live)
 	return DB.settings.mergeStacks and not (live and Scanner.PanelOpen())
 end
 
+-- What a section's items are worth together. An item's rec.worth is junk's
+-- vendor value, or, while sorting by price, the price it is sorted by; its
+-- tile shows it when rec.showWorth, and the section's title the total.
+local function Worth(records)
+	local total = 0
+	for _, rec in ipairs(records) do
+		total = total + (rec.worth or 0)
+	end
+	return total
+end
+
+local function ShowValues(section)
+	local show = DB.settings.junkValueText
+	for _, rec in ipairs(section.records) do
+		rec.worth, rec.showWorth = rec.value, show
+	end
+	section.money = Worth(section.records)
+end
+
+-- rec.priced: the item is sorted by its price (see Tooltip.lua).
+local function ShowPrices(section)
+	local show = DB.settings.priceText
+	for _, rec in ipairs(section.records) do
+		rec.worth, rec.showWorth, rec.priced = rec.price, show, true
+	end
+	section.money = Worth(section.records)
+end
+
 -- One section per category that has items, in the category list's order.
 -- opts.merge: merge stacks; opts.own: the logged-in character's items, so
 -- items it cannot use can be marked; opts.sortMode: one order for every
 -- category, junk included; opts.newFirst: new items (rec.isNew) in a New
--- section before the rest.
+-- section before the rest. Junk shows its vendor values; while sorting by
+-- price, everything shows its price.
 local function CategorySections(records, opts)
 	opts = opts or {}
 	Prepare(records)
@@ -205,6 +252,8 @@ local function CategorySections(records, opts)
 	local tint = opts.own and DB.settings.unusableTint
 	for _, rec in ipairs(records) do
 		rec.unusable = tint and Items.Unusable(rec.link, rec.info) or false
+		-- New items too: a category's moves take its items wherever they show.
+		rec.category = Categories.Classify(rec, rec.info)
 	end
 	local new
 	if opts.newFirst then
@@ -218,8 +267,7 @@ local function CategorySections(records, opts)
 	end
 	local groups = {}
 	for _, rec in ipairs(records) do
-		local key = Categories.Classify(rec, rec.info)
-		rec.category = key
+		local key = rec.category
 		local list = groups[key]
 		if not list then
 			list = {}
@@ -228,28 +276,32 @@ local function CategorySections(records, opts)
 		list[#list + 1] = rec
 	end
 	local settings = DB.settings
+	local mode = opts.sortMode or settings.sortMode
 	local sections = {}
 	for _, entry in ipairs(Categories.List()) do
 		local list = groups[entry.key]
 		if list then
 			local section = { key = entry.key, title = entry.name, records = list, category = true }
+			local order = mode
 			if entry.key == "junk" then
-				Sort.Items(list, opts.sortMode or (settings.junkByValue and "value") or settings.sortMode)
-				local total = 0
-				for _, rec in ipairs(list) do
-					total = total + (rec.value or 0)
-					rec.showValue = settings.junkValueText
-				end
-				section.money = total
-			else
-				Sort.Items(list, opts.sortMode or settings.sortMode)
+				order = opts.sortMode or (settings.junkByValue and "value") or settings.sortMode
+			end
+			Sort.Items(list, order)
+			if Sort.ByPrice(order) then
+				ShowPrices(section)
+			elseif entry.key == "junk" then
+				ShowValues(section)
 			end
 			sections[#sections + 1] = section
 		end
 	end
 	if new and #new > 0 then
-		Sort.Items(new, opts.sortMode or settings.sortMode)
-		table.insert(sections, 1, { key = "new", title = L["New"], records = new })
+		Sort.Items(new, mode)
+		local section = { key = "new", title = L["New"], records = new }
+		if Sort.ByPrice(mode) then
+			ShowPrices(section)
+		end
+		table.insert(sections, 1, section)
 	end
 	return sections
 end
@@ -261,14 +313,16 @@ Window.CategorySections = CategorySections
 function prototype:MarkNew(records)
 	local recent = self.recent
 	for _, rec in ipairs(records) do
+		local key = Items.Key(rec.link)
 		if C.IsNewItem(rec.bag, rec.slot) then
-			recent[rec.position] = rec.link
+			recent[rec.position] = key
 		end
-		rec.isNew = recent[rec.position] == rec.link
+		rec.isNew = recent[rec.position] == key
 	end
 end
 
--- The free space of each bag family, as one "Free" section.
+-- The free space of each bag family, as one "Free" section (a full family
+-- shows 0: see Scanner.Space).
 local function FreeSection(free, live)
 	local entries = {}
 	for _, entry in pairs(free) do
@@ -288,15 +342,26 @@ end
 -- Keeping places
 --------------------------------------------------------------------------------
 
--- While the bags (or the bank, at the bank) stay open, items keep their
--- places: an item that leaves (sold, deposited, used up) leaves a gap, so the
--- rest do not shift under the mouse, and an item that comes in goes at the end
--- of its category, never into a gap, where a quick click could take it.
+-- While the bags (or the bank, at the bank) stay open, nothing shown moves:
+-- * an item that leaves (sold, deposited, disenchanted, used up) leaves a gap;
+-- * an item that stays keeps its tile, even where its category would now put
+--   it elsewhere (it just became new: loot landed on its stack), and when its
+--   link changes (a level gained: items are told apart by Items.Key);
+-- * an item that comes in takes the first gap in its own section (gear swapped
+--   for what was worn, an item bought back), or else in "Just added", a
+--   section at the very end, after the free space, where it otherwise goes
+--   last;
+-- * the free space stays, showing 0 when the bags are full (Scanner.Space);
+-- * sections keep their widths, and Just added starts a row of its own (see
+--   Draw), so nothing beside them moves;
+-- * the window grows downward, its top-left corner held where it is (see
+--   Pin): growing upward from its bottom-right corner moved everything.
 -- Closing the window lays it out afresh, as do the broom and changing the
--- settings, the categories or whose items are shown. (BetterBags' "Preserve
--- Empty Slots as Gaps" works the same way.)
+-- settings, the categories or whose items are shown. (After BetterBags'
+-- "Preserve Empty Slots as Gaps".)
 
 local VACANT = { gap = true } -- the place of an item that has gone
+local ARRIVED = "arrived" -- the section of items that came in while open
 
 -- What an entry is, and where: one tile per item when stacks are merged.
 local function Hash(rec)
@@ -307,47 +372,20 @@ local function Spot(rec)
 	return rec.stacks and "merged" or rec.position
 end
 
--- One section's records in the places they had (entries, as remembered by
--- KeepPlaces): the same item in the same place first, then the same item
--- moved to another slot; gaps for what has gone, and anything new at the end.
-local function KeepSection(entries, records)
-	local byHash = {}
-	for _, rec in ipairs(records) do
-		local hash = Hash(rec)
-		local list = byHash[hash]
-		if not list then
-			list = {}
-			byHash[hash] = list
-		end
-		list[#list + 1] = rec
-	end
-	local placed, used = {}, {}
-	for pass = 1, 2 do
-		for i, entry in ipairs(entries) do
-			if entry.hash and not placed[i] then
-				for _, rec in ipairs(byHash[entry.hash] or {}) do
-					if not used[rec] and (pass == 2 or Spot(rec) == entry.spot) then
-						placed[i], used[rec] = rec, true
-						break
-					end
-				end
-			end
+-- Puts an item that came in into the first gap of a section's records.
+local function Fill(records, rec)
+	for i, entry in ipairs(records) do
+		if entry.gap then
+			records[i] = rec
+			return true
 		end
 	end
-	local result = {}
-	for i = 1, #entries do
-		result[i] = placed[i] or VACANT
-	end
-	for _, rec in ipairs(records) do
-		if not used[rec] then
-			result[#result + 1] = rec
-		end
-	end
-	return result
+	return false
 end
 
 -- Puts the model's live items in the places they had at the last refresh,
--- and remembers the places for the next one.
+-- and remembers the places for the next one. Where places were kept,
+-- model.kept is set, and model.widths has the sections' widths (see Draw).
 function prototype:KeepPlaces(model)
 	local sections = model.sections
 	if not (DB.settings.keepPlaces and model.live and sections and (self.kind == "bags" or self.kind == "bank")) then
@@ -359,52 +397,85 @@ function prototype:KeepPlaces(model)
 	local sig = tostring(self.ownerKey) .. "|" .. tostring(Merging(true))
 	local places = self.places
 	if places and places.sig == sig then
-		local fresh, free = {}, nil
+		-- Everything there is now, by what it is, in whatever section, and the
+		-- section each item would be in if laid out afresh.
+		local byHash, fresh, home, now, free = {}, {}, {}, {}, nil
 		for _, section in ipairs(sections) do
 			if section.free then
 				free = section
 			else
-				fresh[section.key] = section
+				now[section.key] = section
+				for _, rec in ipairs(section.records) do
+					fresh[#fresh + 1] = rec
+					home[rec] = section.key
+					local hash = Hash(rec)
+					local list = byHash[hash]
+					if not list then
+						list = {}
+						byHash[hash] = list
+					end
+					list[#list + 1] = rec
+				end
 			end
 		end
-		-- The sections there were, in their order, with new ones where they go.
-		local order, kept = {}, {}
-		for _, remembered in ipairs(places.sections) do
-			order[#order + 1] = remembered.key
-			kept[remembered.key] = remembered
-		end
-		local at = 0
-		for _, section in ipairs(sections) do
-			if not section.free then
-				local found
-				for i, key in ipairs(order) do
-					if key == section.key then
-						found = i
-						break
+		-- Each place takes the same item in the same slot, or else the same
+		-- item moved to another slot; a place whose item has gone stays empty.
+		local placed, used = {}, {}
+		for pass = 1, 2 do
+			for s, remembered in ipairs(places.sections) do
+				local got = placed[s] or {}
+				placed[s] = got
+				for i, entry in ipairs(remembered.entries) do
+					if entry.hash and not got[i] then
+						for _, rec in ipairs(byHash[entry.hash] or {}) do
+							if not used[rec] and (pass == 2 or Spot(rec) == entry.spot) then
+								got[i], used[rec] = rec, true
+								break
+							end
+						end
 					end
 				end
-				if found then
-					at = found
-				else
-					at = at + 1
-					table.insert(order, at, section.key)
+			end
+		end
+		local result, byKey, arrived = {}, {}, nil
+		for s, remembered in ipairs(places.sections) do
+			local records = {}
+			for i = 1, #remembered.entries do
+				records[i] = placed[s][i] or VACANT
+			end
+			local section = { key = remembered.key, title = remembered.title, category = remembered.category, records = records }
+			byKey[remembered.key] = section
+			if remembered.key == ARRIVED then
+				arrived = section
+			else
+				result[#result + 1] = section
+			end
+		end
+		result[#result + 1] = free
+		-- What came in: into a gap in its own section, else into one in Just
+		-- added, else after the rest of Just added.
+		for _, rec in ipairs(fresh) do
+			if not used[rec] then
+				local own = byKey[home[rec]]
+				if not (own and Fill(own.records, rec)) then
+					arrived = arrived or { key = ARRIVED, title = L["Just added"], records = {} }
+					if not Fill(arrived.records, rec) then
+						arrived.records[#arrived.records + 1] = rec
+					end
 				end
 			end
 		end
-		local result = {}
-		for _, key in ipairs(order) do
-			local remembered, section = kept[key], fresh[key]
-			if not section then
-				-- Everything in it has gone: its places stay, empty.
-				section = { key = key, title = remembered.title, category = remembered.category, records = {} }
+		result[#result + 1] = arrived
+		-- A title with a total shows what is in the section now.
+		local byPrice = Sort.ByPrice(DB.settings.sortMode)
+		for _, section in ipairs(result) do
+			local latest = now[section.key]
+			if (latest and latest.money) or (section == arrived and byPrice) then
+				section.money = Worth(section.records)
 			end
-			if remembered then
-				section.records = KeepSection(remembered.entries, section.records)
-			end
-			result[#result + 1] = section
 		end
-		result[#result + 1] = free
 		model.sections = result
+		model.kept, model.widths = true, places.widths
 		sections = result
 	end
 	local remembered = {}
@@ -423,6 +494,30 @@ end
 -- The next refresh lays the window out afresh.
 function prototype:ForgetPlaces()
 	self.places = nil
+end
+
+-- A category section with that category's items in Just added too, for
+-- moving the whole category from its title's menu.
+function prototype:WholeCategory(section)
+	local arrived
+	for _, shown in ipairs(self.sections or {}) do
+		if shown.key == ARRIVED then
+			arrived = shown
+		end
+	end
+	if not arrived then
+		return section
+	end
+	local records = {}
+	for _, rec in ipairs(section.records) do
+		records[#records + 1] = rec
+	end
+	for _, rec in ipairs(arrived.records) do
+		if not rec.gap and rec.category == section.key then
+			records[#records + 1] = rec
+		end
+	end
+	return { key = section.key, title = section.title, category = section.category, records = records }
 end
 
 local function CharacterName(key)
@@ -642,7 +737,11 @@ function prototype:FindModel()
 			for _, rec in ipairs(found) do
 				total = total + rec.count
 			end
-			sections[#sections + 1] = { key = "place" .. i, title = place.title, records = found }
+			local section = { key = "place" .. i, title = place.title, records = found }
+			if Sort.ByPrice(DB.settings.sortMode) then
+				ShowPrices(section)
+			end
+			sections[#sections + 1] = section
 		end
 	end
 	if #sections == 0 then
@@ -714,7 +813,7 @@ local function Title_OnClick(self, button)
 	MenuUtil.CreateContextMenu(self, function(_, root)
 		root:CreateTitle(Categories.Name(key))
 		-- At the bank or a mailbox: move the whole category.
-		if window and ns.Transfer.AddToMenu(root, window, section) then
+		if window and ns.Transfer.AddToMenu(root, window, window:WholeCategory(section)) then
 			root:CreateDivider()
 		end
 		if key ~= Categories.CATCH_ALL then
@@ -802,6 +901,7 @@ end
 function prototype:Draw(model)
 	self:ReleaseAll()
 	self.live = model.live and true or false -- its items can be used and moved
+	self.sections = model.sections
 	local settings = DB.settings
 	local size = settings.tileSize
 	local columns = max(4, settings[self.spec.columns] or 12)
@@ -810,6 +910,12 @@ function prototype:Draw(model)
 	local level = content:GetFrameLevel() + 2
 	local compact = settings.compact
 	local x, y, rowHeight = 0, 0, 0
+	-- While places are kept, each section keeps the width it had, though its
+	-- title's count or total changes (in a row of small sections, that would
+	-- move the ones after it), and Just added, which grows as things come in,
+	-- starts a row of its own, so growing never moves it.
+	local keptWidths = model.kept and model.widths or nil
+	local widths = {}
 
 	local sections = model.sections or {}
 	for _, section in ipairs(sections) do
@@ -818,9 +924,12 @@ function prototype:Draw(model)
 		local cols = min(count, columns)
 		local rows = ceil(count / cols)
 		local title = self:AcquireTitle(section)
-		local width = min(fullWidth, max(cols * size + (cols - 1) * GAP, title.width))
+		local arrived = section.key == ARRIVED
+		local kept = keptWidths and not arrived and keptWidths[section.key]
+		local width = min(fullWidth, max(cols * size + (cols - 1) * GAP, kept or title.width))
+		widths[section.key] = width
 		local height = TITLE_H + rows * size + (rows - 1) * GAP
-		if x > 0 and (not compact or x + width > fullWidth) then
+		if x > 0 and (not compact or arrived or x + width > fullWidth) then
 			y = y + rowHeight + ROW_GAP
 			x, rowHeight = 0, 0
 		end
@@ -844,6 +953,9 @@ function prototype:Draw(model)
 		end
 		x = x + width + SECTION_GAP
 		rowHeight = max(rowHeight, height)
+	end
+	if self.places then
+		self.places.widths = widths
 	end
 	local contentHeight = y + rowHeight
 
@@ -888,11 +1000,23 @@ function prototype:Draw(model)
 	end
 	self.scroll:SetPoint("BOTTOMRIGHT", -PAD, FOOTER_H + 6 + barHeight)
 
-	-- Size the window to its contents, scrolling past most of the screen height.
+	-- Size the window to its contents, scrolling past most of the screen
+	-- height. While it keeps places it grows downward from its top-left
+	-- corner (see Pin) and scrolls rather than run off the bottom of the
+	-- screen, where the game would push it back up.
+	if model.kept then
+		self:Pin()
+	else
+		self:Unpin()
+	end
 	local scale = self:GetScale()
 	local screen = UIParent:GetHeight() / scale
 	local chrome = HEADER_H + FOOTER_H + 10 + barHeight
-	local visible = max(min(contentHeight, floor(screen * 0.8) - chrome), 40)
+	local room = floor(screen * 0.8)
+	if self.pinnedTop then
+		room = min(room, floor(self.pinnedTop))
+	end
+	local visible = max(min(contentHeight, room - chrome), 40)
 	local scrolling = contentHeight > visible
 	local width = max(MIN_WIDTH, fullWidth + 2 * PAD + (scrolling and SCROLLBAR or 0))
 	self:SetSize(width, visible + chrome)
@@ -1106,6 +1230,7 @@ end
 function prototype:RestorePosition()
 	local spec = self.spec
 	local saved = DB.positions[spec.frameName]
+	self.pinnedTop = nil
 	self:ClearAllPoints()
 	if type(saved) == "table" and saved[1] then
 		self:SetPoint(saved[1], UIParent, saved[1], saved[2] or 0, saved[3] or 0)
@@ -1115,7 +1240,7 @@ function prototype:RestorePosition()
 end
 
 -- The bags keep their bottom-right corner in place as they grow and shrink,
--- the other windows their top-left corner.
+-- the other windows their top-left corner (but see Pin).
 function prototype:SavePosition()
 	local anchor = self.spec.anchor
 	local scale = self:GetScale()
@@ -1127,9 +1252,32 @@ function prototype:SavePosition()
 		x = self:GetLeft() or 0
 		y = (self:GetTop() or 0) - UIParent:GetHeight() / scale
 	end
+	self.pinnedTop = nil
 	self:ClearAllPoints()
 	self:SetPoint(anchor, UIParent, anchor, x, y)
 	DB.positions[self.spec.frameName] = { anchor, x, y }
+end
+
+-- While the window keeps places, it is held by its top-left corner where that
+-- is now, so it grows downward and to the right, and nothing shown in it
+-- moves (the bags would grow upward and to the left). Laid out afresh, it
+-- goes back to where it was left.
+function prototype:Pin()
+	if self.pinnedTop then
+		return
+	end
+	local left, top = self:GetLeft(), self:GetTop()
+	if left and top then
+		self:ClearAllPoints()
+		self:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", left, top)
+		self.pinnedTop = top
+	end
+end
+
+function prototype:Unpin()
+	if self.pinnedTop then
+		self:RestorePosition()
+	end
 end
 
 function prototype:ApplyScale()
@@ -1269,7 +1417,7 @@ function Window.Create(kind)
 	frame.kind, frame.spec = kind, spec
 	frame.tiles, frame.titles, frame.buttons = {}, {}, {}
 	frame.search, frame.searchText = "", ""
-	frame.recent = {} -- [bag * 1000 + slot] = link, new items until the window closes
+	frame.recent = {} -- [bag * 1000 + slot] = Items.Key, new items until the window closes
 	frame:SetFrameStrata("MEDIUM")
 	frame:SetToplevel(true)
 	frame:SetClampedToScreen(true)

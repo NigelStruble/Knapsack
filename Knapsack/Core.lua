@@ -225,10 +225,10 @@ local function Listen()
 	for _, what in ipairs({ "items", "categories", "characters", "guilds", "guildChanged" }) do
 		ns.Listen(what, RefreshAll)
 	end
-	-- A change of settings or categories, or item data arriving (which can
-	-- change an item's category or place in it), lays the windows out afresh,
-	-- gaps left by items that have gone included (see Window.lua: keeping
-	-- places).
+	-- A change of settings or categories lays the windows out afresh, gaps
+	-- left by items that have gone included (see Window.lua: keeping places).
+	-- Item data arriving does not: that happens as loot comes in (a
+	-- disenchant's first dust of the session), and would move everything.
 	ns.Listen("settings", function()
 		for _, window in ipairs(Windows()) do
 			window:ForgetPlaces()
@@ -236,13 +236,11 @@ local function Listen()
 			window:QueueRefresh()
 		end
 	end)
-	for _, what in ipairs({ "categories", "items" }) do
-		ns.Listen(what, function()
-			for _, window in ipairs(Windows()) do
-				window:ForgetPlaces()
-			end
-		end)
-	end
+	ns.Listen("categories", function()
+		for _, window in ipairs(Windows()) do
+			window:ForgetPlaces()
+		end
+	end)
 	-- Stacks merge again, or come apart, as a mailbox, trade, auction house,
 	-- bank or guild vault opens and closes.
 	ns.Listen("panels", function()

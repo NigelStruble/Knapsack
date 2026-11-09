@@ -2,8 +2,9 @@ local _, ns = ...
 local L, C, W, DB = ns.L, ns.C, ns.W, ns.DB
 
 -- Item tiles: how an item looks in a window (icon, quality border, stack
--- count, item level or a mail item's time left, vendor value, cooldown,
--- new-item glow, quest marker, red for items the character cannot use).
+-- count, item level or a mail item's time left, vendor value or price, BoE /
+-- BoU, cooldown, new-item glow, quest marker, red for items the character
+-- cannot use).
 --
 -- A tile never handles clicks on the player's own items itself. For an item in
 -- the player's bags (or bank, at the bank), one of Blizzard's own container
@@ -28,6 +29,7 @@ local ipairs, setmetatable, getmetatable, format, tremove, floor = ipairs, setme
 
 local QUESTION_MARK = 134400
 local QUEST_BANG = _G.TEXTURE_ITEM_QUEST_BANG or "Interface\\ContainerFrame\\UI-Icon-QuestBang"
+local WORN_CHECK = "Interface\\RaidFrame\\ReadyCheck-Ready"
 local GLOW_ATLAS = "bags-glow-white"
 local hasGlowAtlas = _G.C_Texture and _G.C_Texture.GetAtlasInfo and _G.C_Texture.GetAtlasInfo(GLOW_ATLAS) ~= nil
 local BORDER_PLAIN = { 0.2, 0.2, 0.22 }
@@ -35,6 +37,7 @@ local BORDER_QUEST = { 1, 0.82, 0 }
 local SLOT_BG = { 0.05, 0.05, 0.06, 0.9 }
 local FREE_BG = { 0.12, 0.12, 0.14, 0.9 }
 local UNUSABLE = { 1, 0.3, 0.3 }
+local TRADABLE = { 0.45, 1, 0.45 } -- the BoE / BoU mark
 local DIMMED = 0.25
 
 --------------------------------------------------------------------------------
@@ -65,7 +68,7 @@ local function ShowTooltip(tile)
 		GameTooltip:SetOwner(tile, "ANCHOR_RIGHT")
 		GameTooltip:SetText(free.name or L["Free slots"], 1, 1, 1)
 		GameTooltip:AddLine(format(L["%d free slots"], free.count), 0.8, 0.8, 0.8)
-		if free.live then
+		if free.live and free.bag then
 			GameTooltip:AddLine(L["Drop an item here to put it in an empty slot."], 0.6, 0.6, 0.6, true)
 		end
 		GameTooltip:Show()
@@ -135,6 +138,8 @@ local function SizeBorder(tile)
 	tile.level:SetPoint("TOPLEFT", inset, -inset)
 	tile.quest:ClearAllPoints()
 	tile.quest:SetPoint("TOPRIGHT", -size, -size)
+	tile.worn:ClearAllPoints()
+	tile.worn:SetPoint("BOTTOMRIGHT", -inset, inset)
 end
 
 local function NewTile()
@@ -159,9 +164,18 @@ local function NewTile()
 	tile.value:SetJustifyH("LEFT")
 	tile.level = overlay:CreateFontString(nil, "OVERLAY", "NumberFontNormalSmall")
 	tile.level:SetJustifyH("LEFT")
+	-- BoE / BoU, top right, when the item's price is in the bottom left.
+	tile.bind = overlay:CreateFontString(nil, "OVERLAY", "NumberFontNormalSmall")
+	tile.bind:SetJustifyH("RIGHT")
+	tile.bind:SetTextColor(TRADABLE[1], TRADABLE[2], TRADABLE[3])
 	tile.quest = overlay:CreateTexture(nil, "OVERLAY")
 	tile.quest:SetTexture(QUEST_BANG)
 	tile.quest:SetSize(14, 14)
+	-- Gear the character has worn: a check where a stack count would be (gear
+	-- does not stack).
+	tile.worn = overlay:CreateTexture(nil, "OVERLAY")
+	tile.worn:SetTexture(WORN_CHECK)
+	tile.worn:SetSize(12, 12)
 	tile.glow = overlay:CreateTexture(nil, "OVERLAY")
 	tile.glow:SetAllPoints()
 	if hasGlowAtlas then
@@ -239,6 +253,31 @@ local function CountText(count)
 	return count > 1 and count or ""
 end
 
+-- "BoE" or "BoU" on items that can still be traded, if marked.
+local function BindText(rec, info)
+	if not (DB.settings.bindMarker and info) then
+		return nil
+	end
+	local Categories = ns.Categories
+	if Categories.HasBinding("boe", rec, info) then
+		return L["BoE"]
+	elseif Categories.HasBinding("bou", rec, info) then
+		return L["BoU"]
+	end
+	return nil
+end
+
+-- The BoE / BoU mark top right, or beside the quest mark drawn there.
+local function PlaceBind(tile, quest)
+	tile.bind:ClearAllPoints()
+	if quest then
+		tile.bind:SetPoint("TOPRIGHT", tile.quest, "TOPLEFT", 0, 0)
+	else
+		local inset = (tile.borderSize or 0) + 1
+		tile.bind:SetPoint("TOPRIGHT", -inset, -inset)
+	end
+end
+
 -- Draws an item. rec comes from a window (see Window.lua: Prepare).
 function Tiles.Set(tile, rec, size)
 	tile.record, tile.free, tile.gap = rec, nil, nil
@@ -268,17 +307,22 @@ function Tiles.Set(tile, rec, size)
 	end
 
 	tile.count:SetText(CountText(rec.count))
-	-- Bottom left: a junk item's value, or "BoE" / "BoU" on items that can
-	-- still be traded (junk never binds, so the two do not meet).
+	-- Bottom left: what the item is worth (junk's vendor value, or the price
+	-- it is sorted by; see Window.lua), else "BoE" / "BoU", which then moves
+	-- top right.
+	local worth = rec.showWorth and rec.worth and rec.worth > 0 and rec.worth
+	local bind = BindText(rec, info)
 	tile.value:SetTextColor(1, 1, 1)
-	if rec.showValue and rec.value and rec.value > 0 then
-		tile.value:SetText(C.ShortMoney(rec.value))
-	elseif DB.settings.bindMarker and info and ns.Categories.HasBinding("boe", rec, info) then
-		tile.value:SetText(L["BoE"])
-		tile.value:SetTextColor(0.45, 1, 0.45)
-	elseif DB.settings.bindMarker and info and ns.Categories.HasBinding("bou", rec, info) then
-		tile.value:SetText(L["BoU"])
-		tile.value:SetTextColor(0.45, 1, 0.45)
+	tile.bind:SetText("")
+	if worth then
+		tile.value:SetText(C.ShortMoney(worth))
+		if bind then
+			PlaceBind(tile, rec.questStarter)
+			tile.bind:SetText(bind)
+		end
+	elseif bind then
+		tile.value:SetText(bind)
+		tile.value:SetTextColor(TRADABLE[1], TRADABLE[2], TRADABLE[3])
 	else
 		tile.value:SetText("")
 	end
@@ -301,6 +345,7 @@ function Tiles.Set(tile, rec, size)
 		tile.level:SetText("")
 	end
 	tile.quest:SetShown(rec.questStarter and true or false)
+	tile.worn:SetShown((DB.settings.wornMarker and rec.worn) and true or false)
 
 	-- New items glow until the mouse passes over them, like the default bags.
 	if rec.live and C.isBag[rec.bag] and IsNew(rec) then
@@ -324,14 +369,17 @@ function Tiles.SetGap(tile, size)
 	SetBorder(tile, BORDER_PLAIN[1], BORDER_PLAIN[2], BORDER_PLAIN[3])
 	tile.count:SetText("")
 	tile.value:SetText("")
+	tile.bind:SetText("")
 	tile.level:SetText("")
 	tile.quest:Hide()
+	tile.worn:Hide()
 	tile.glow:Hide()
 	tile.cooldown:Hide()
 	tile.hover:Hide()
 end
 
--- Draws the free slots of one bag family: entry = { count, bag, slot, name, live }.
+-- Draws the free slots of one bag family: entry = { count, bag, slot, name,
+-- live }, with count 0 and no bag or slot when that family is full.
 function Tiles.SetFree(tile, entry, size)
 	tile.record, tile.free, tile.gap = nil, entry, nil
 	tile:SetSize(size, size)
@@ -341,8 +389,10 @@ function Tiles.SetFree(tile, entry, size)
 	SetBorder(tile, BORDER_PLAIN[1], BORDER_PLAIN[2], BORDER_PLAIN[3])
 	tile.count:SetText(entry.count)
 	tile.value:SetText("")
+	tile.bind:SetText("")
 	tile.level:SetText("")
 	tile.quest:Hide()
+	tile.worn:Hide()
 	tile.glow:Hide()
 	tile.cooldown:Hide()
 	tile.hover:Hide()

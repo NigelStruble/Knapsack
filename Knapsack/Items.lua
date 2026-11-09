@@ -1,4 +1,4 @@
-local _, ns = ...
+local ADDON, ns = ...
 local C = ns.C
 
 -- Item details for display, sorting and categories, cached by item link.
@@ -81,6 +81,24 @@ C.On("GET_ITEM_INFO_RECEIVED", function(_, itemID, success)
 		ns.Send("items")
 	end
 end)
+
+--------------------------------------------------------------------------------
+-- What an item is
+--------------------------------------------------------------------------------
+
+-- A link says more than what the item is: the level and specialization of
+-- the character the game made the link for, so every link in the bags
+-- changes when the character levels up, and on Forever who made a crafted
+-- item that does not stack (Wizard Oils from two enchanters). Items.Key is
+-- the link's item string without those: the same key, the same item.
+--   item:id:enchant:gem1:gem2:gem3:gem4:suffix:unique:LEVEL:SPEC:...
+local LINKED_FOR = "^(item:" .. ("[^:]*:"):rep(8) .. ")[^:]*:[^:]*"
+local MAKER = "Player%-%d+%-%x+"
+
+function Items.Key(link)
+	local key = (link:match("|H(.-)|h") or link):gsub(MAKER, "")
+	return (key:gsub(LINKED_FOR, "%1:"))
+end
 
 --------------------------------------------------------------------------------
 -- Items the character cannot use
@@ -229,4 +247,61 @@ end
 -- Whether a spell the player cast may have used up a charge.
 function Items.IsChargeSpell(spellID)
 	return spellID ~= nil and chargeSpells[spellID] == true
+end
+
+--------------------------------------------------------------------------------
+-- Auction prices
+--------------------------------------------------------------------------------
+
+-- What an item sells for on the auction house, one of it, as an auction addon
+-- knows it: Auctionator, then TradeSkillMaster (its market value). Nil when
+-- neither is loaded or neither has seen the item. Kept a minute per link, as
+-- sorting asks for every item at each redraw.
+local AUCTION_KEEP = 60
+local auctionPrices, auctionTimes = {}, {}
+
+local function Priced(ok, price)
+	return ok and type(price) == "number" and price > 0 and price or nil
+end
+
+local function FromAuctionator(link)
+	local auctionator = _G.Auctionator
+	local api = auctionator and auctionator.API and auctionator.API.v1
+	if api and api.GetAuctionPriceByItemLink then
+		return Priced(pcall(api.GetAuctionPriceByItemLink, ADDON, link))
+	end
+	return nil
+end
+
+local function FromTSM(link)
+	local api = _G.TSM_API
+	if api and api.GetCustomPriceValue and api.ToItemString then
+		local ok, itemString = pcall(api.ToItemString, link)
+		if ok and itemString then
+			return Priced(pcall(api.GetCustomPriceValue, "DBMarket", itemString))
+		end
+	end
+	return nil
+end
+
+function Items.AuctionPrice(link)
+	local now = GetTime()
+	local at = auctionTimes[link]
+	if at and now - at < AUCTION_KEEP then
+		return auctionPrices[link] or nil
+	end
+	local price = FromAuctionator(link) or FromTSM(link)
+	auctionPrices[link], auctionTimes[link] = price or false, now
+	return price
+end
+
+-- The auction addon prices come from, by name, or nil.
+function Items.AuctionSource()
+	local auctionator = _G.Auctionator
+	if auctionator and auctionator.API and auctionator.API.v1 and auctionator.API.v1.GetAuctionPriceByItemLink then
+		return "Auctionator"
+	elseif _G.TSM_API and _G.TSM_API.GetCustomPriceValue then
+		return "TradeSkillMaster"
+	end
+	return nil
 end

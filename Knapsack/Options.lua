@@ -60,6 +60,13 @@ local SORT_ITEMS = {
 	{ value = "quality", text = L["Quality, then type and name"] },
 	{ value = "name", text = L["Name"] },
 	{ value = "type", text = L["Item type, then quality"] },
+	{ value = "priceHigh", text = L["Price, most valuable first"] },
+	{ value = "priceLow", text = L["Price, least valuable first"] },
+}
+
+local PRICE_SOURCES = {
+	{ value = "vendor", text = L["Vendor price"] },
+	{ value = "auction", text = L["Auction price, where known"] },
 }
 
 -- What each built-in category holds, for the Categories page.
@@ -119,7 +126,12 @@ local function BuildGeneral(page)
 	left:Add(W.Checkbox(page, L["Put small categories side by side"], Get("compact"), Set("compact"),
 		L["Otherwise every category starts on its own row."]))
 	left:Add(W.Checkbox(page, L["Keep items in place while a window is open"], Get("keepPlaces"), Set("keepPlaces"),
-		L["An item you sell, deposit or use up leaves a gap in the bags or bank, so the rest stay where they are until you close the window. New items go at the end of their category."]))
+		L["An item you sell, deposit or use up leaves a gap in the bags or bank, so the rest stay where they are until you close the window. Items that come in go in Just added, at the very end."]))
+	left:Skip(6)
+	left:Add(W.Header(page, L["Tips"], 300))
+	left:Add(W.Note(page, L["Drop an item on a category's title in the bags to keep it in that category. Middle-click the item to undo it."], 300))
+	left:Add(W.Note(page, L["Point at your gold in the bags to see every character's gold."], 300))
+	left:Add(W.Note(page, L["The bank, mailbox and guild vault are recorded each time you visit them, and every character's bags each time you play them. Mail between your characters is recorded as it is sent."], 300))
 
 	local right = NewColumn(page, 340, -8)
 	right:Add(W.Header(page, L["Items"], 300))
@@ -131,12 +143,19 @@ local function BuildGeneral(page)
 		L["Weapons and armor, including rings, necklaces, trinkets and off-hands."]))
 	right:Add(W.Checkbox(page, L["Mark items you can still trade"], Get("bindMarker"), Set("bindMarker"),
 		L["BoE (Bind on Equip) or BoU (Bind on Use) in the corner of items that are not soulbound yet."]))
+	right:Add(W.Checkbox(page, L["Mark gear you have worn"], Get("wornMarker"), Set("wornMarker"),
+		L["A check in the corner of gear your character has had on, or that is in one of your equipment sets, so gear you only picked up stands out. Gear counts once it has been worn with Knapsack on."]))
 	right:Add(W.Checkbox(page, L["Red for items you cannot use"], Get("unusableTint"), Set("unusableTint"),
 		L["Gear you cannot wear or wield, recipes you cannot learn and items you are not high enough level or skilled enough to use, for the character you are playing."]))
 	right:Add(W.Slider(page, L["Quality border, in screen pixels"], 1, 4, 1, Get("borderSize"), Set("borderSize")))
 	right:Skip(6)
 	right:Add(W.Header(page, L["Sorting"], 300))
 	right:Add(W.Dropdown(page, L["Sort items in a category by"], 240, SORT_ITEMS, Get("sortMode"), Set("sortMode")))
+	right:Add(W.Dropdown(page, L["Price to sort by"], 240, PRICE_SOURCES, Get("priceSource"), Set("priceSource"), {
+		tooltip = L["What a whole stack is worth, for sorting by price. Auction prices come from Auctionator or TradeSkillMaster, when one is installed; items they have no price for use their vendor price."],
+	}))
+	right:Add(W.Checkbox(page, L["Show the price on each item"], Get("priceText"), Set("priceText"),
+		L["While sorting by price, each item shows the price it is sorted by, whole stack included, as junk shows its vendor value. Category titles show their total either way."]))
 	right:Skip(6)
 	right:Add(W.Header(page, L["Junk"], 300))
 	right:Add(W.Checkbox(page, L["Sort junk by vendor value, cheapest first"], Get("junkByValue"), Set("junkByValue"),
@@ -146,11 +165,6 @@ local function BuildGeneral(page)
 	right:Add(W.Header(page, L["Tooltips"], 300))
 	right:Add(W.Checkbox(page, L["Show how many each character has"], Get("tooltipCounts"), Set("tooltipCounts"),
 		L["Item tooltips list how many your characters carry and keep in their bank, and how many are in your guild vaults."]))
-	right:Skip(6)
-	right:Add(W.Header(page, L["Tips"], 300))
-	right:Add(W.Note(page, L["Drop an item on a category's title in the bags to keep it in that category. Middle-click the item to undo it."], 300))
-	right:Add(W.Note(page, L["Point at your gold in the bags to see every character's gold."], 300))
-	right:Add(W.Note(page, L["The bank, mailbox and guild vault are recorded each time you visit them, and every character's bags each time you play them. Mail between your characters is recorded as it is sent."], 300))
 end
 
 --------------------------------------------------------------------------------
@@ -271,7 +285,7 @@ function Options:RefreshDetail()
 	local key = selectedKey
 	local custom = key and Categories.Custom(key)
 	detail.title:SetText(key and Categories.Name(key) or "")
-	detail.description:SetText(custom and L["A category of your own. It takes every item that matches all of its rules, and items dropped on its title. With no rules it only holds dropped items. For a Bind on Equip group, set Binding and leave the rest."] or DESCRIPTIONS[key] or "")
+	detail.description:SetText(custom and L["A category of your own. It takes every item that matches all of its rules, and items dropped on its title. With no rules it only holds dropped items. For a Bind on Equip group, set Binding and leave the rest; for gear to get rid of, set Worn to gear you have not worn."] or DESCRIPTIONS[key] or "")
 	for _, widget in ipairs(detail.customOnly) do
 		widget:SetShown(custom ~= nil)
 	end
@@ -307,7 +321,7 @@ local function SetRule(field)
 		if not custom then
 			return
 		end
-		local rules = { quality = custom.quality, class = custom.class, text = custom.text, bind = custom.bind }
+		local rules = { quality = custom.quality, class = custom.class, text = custom.text, bind = custom.bind, worn = custom.worn }
 		if value == false or value == "" then
 			value = nil
 		end
@@ -355,6 +369,9 @@ local function BuildCategories(page)
 	Custom(column:Add(W.Dropdown(page, L["Item type"], 240, Categories.ClassChoices, Selected("class"), SetRule("class"))))
 	Custom(column:Add(W.Dropdown(page, L["Binding"], 240, Categories.BindChoices, Selected("bind"), SetRule("bind"), {
 		tooltip = L["Bind on Equip, not bound yet: gear and other items you can still sell or give away."],
+	})))
+	Custom(column:Add(W.Dropdown(page, L["Worn"], 240, Categories.WornChoices, Selected("worn"), SetRule("worn"), {
+		tooltip = L["Gear you have not worn: what your character only picked up, to sell or give away. Gear counts as worn once it has been on with Knapsack running, or while it is in an equipment set."],
 	})))
 	Custom(column:Add(W.EditBox(page, L["Name contains"], 240, Selected("text"), SetRule("text"), {
 		tooltip = L["Only items with this in their name. Not case sensitive."],

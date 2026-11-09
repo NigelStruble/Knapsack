@@ -6,7 +6,8 @@ local Categories = ns.Categories
 --   part of a name   linen, wizard oil
 --   a keyword        boe, bou, soulbound, tradable, junk, common, uncommon,
 --                    rare, epic, legendary, gear, consumable, reagent,
---                    tradegoods, recipe, quest, new, charges, unusable
+--                    tradegoods, recipe, quest, new, charges, unusable, worn,
+--                    unworn
 --   an item level    ilvl>30, ilvl>=30, ilvl<20, ilvl=25
 -- A # in front of a word makes it a keyword only (#new); a ! turns a word
 -- around (!soulbound).
@@ -70,6 +71,13 @@ local KEYWORDS = {
 	end,
 	unusable = function(rec)
 		return rec.unusable == true
+	end,
+	-- Gear the character has worn, or has only picked up.
+	worn = function(rec, info)
+		return Categories.HasWorn("worn", rec, info)
+	end,
+	unworn = function(rec, info)
+		return Categories.HasWorn("unworn", rec, info)
 	end,
 }
 KEYWORDS.consumables, KEYWORDS.reagents, KEYWORDS.recipes = KEYWORDS.consumable, KEYWORDS.reagent, KEYWORDS.recipe
