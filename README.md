@@ -7,9 +7,9 @@ characters' bags can be looked at from anywhere.
 
 ## Features
 
-- **Categories.** Equipment, Consumables, Reagents, Trade Goods, Recipes, Quest
-  Items, Ammo, Bags, Keys, Miscellaneous and Junk. You can hide, rename and
-  reorder them, and make your own.
+- **Categories.** Equipment Sets, Equipment, Consumables, Reagents, Trade
+  Goods, Recipes, Quest Items, Ammo, Bags, Keys, Miscellaneous and Junk. You
+  can hide, rename and reorder them, and make your own.
 - **Junk.** Every Poor (grey) item goes into Junk, whatever kind of item it is.
   Junk is sorted by what the whole stack sells for, cheapest first, so the
   first junk item is always the one to throw away. Each junk item shows its
@@ -41,7 +41,13 @@ characters' bags can be looked at from anywhere.
   the corner, so gear you keep for another set stands out from gear you only
   picked up. Knapsack tells copies apart: of two of the same sword, only the
   one you wore is marked. Gear you wore before Knapsack kept track counts once
-  you put it on again; on Forever, gear in an equipment set always counts.
+  you put it on again; gear in an equipment set always counts.
+- **Equipment sets.** Gear in one of your equipment sets goes in Equipment
+  Sets, first in the bags, so it never mixes with gear to sell, not even grey
+  gear in Junk. The sets are the game's own on Forever, where ItemRack Forever
+  keeps its sets too, and ItemRack's wherever ItemRack is installed, as on
+  Anniversary. An ItemRack set takes the very item saved in it, with its
+  enchant and gems; ammo in a set stays in Ammo.
 - **Move a whole category.** At the bank, put a whole category in the bank or
   take it out; at a mailbox, mail a whole category to one of your characters.
 - **Merged stacks.** All stacks of an item show as one tile with the total,

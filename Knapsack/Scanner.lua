@@ -24,14 +24,14 @@ local ipairs, pairs, next, wipe, time, sort = ipairs, pairs, next, wipe, time, t
 local tremove = table.remove
 
 --------------------------------------------------------------------------------
--- Gear the character has worn
+-- Gear the character has worn, and gear in its equipment sets
 --------------------------------------------------------------------------------
 
 -- Gear counts as worn once the character has had it on: the GUID of each item
 -- in its equipment slots is noted, at login and whenever its gear changes, in
--- char.worn[guid] = when last seen. Gear in one of the game's equipment sets
--- counts too. Gear never worn is what the character only picked up. Items
--- not seen for a year are forgotten.
+-- char.worn[guid] = when last seen. Gear in one of its equipment sets counts
+-- too. Gear never worn is what the character only picked up. Items not seen
+-- for a year are forgotten.
 local WORN_KEEP = 365 * 86400
 
 local function WornList()
@@ -43,18 +43,61 @@ local function WornList()
 	return char.worn
 end
 
--- Whether the item in a bag slot is gear the character has worn. worn: from
--- WornList.
-local function Worn(worn, bag, slot, link, itemID)
-	if not ns.Items.Get(link, itemID).isGear then
+-- An equipment set is one of the game's (the equipment manager of the Retail
+-- engine Forever runs on, which is where ItemRack Forever keeps its sets) or
+-- one of ItemRack's own. ItemRack, made for clients with no equipment manager
+-- (Anniversary), keeps them in ItemRackUser.Sets[name].equip[slot] = the
+-- item's string without its "item:"; the sets named "~..." are its own
+-- workings (the combat queue). As in ItemRack's own tooltips, an item in the
+-- bags is in a set when it is the item saved there, with the same enchant and
+-- gems, whatever level the set was saved at (see Items.Key). A set saved by
+-- item ID alone, as older versions of ItemRack did, takes any copy. Returns
+-- { keys = [Items.Key] = true, ids = [itemID] = true }, or nil without
+-- ItemRack.
+local function ItemRackItems()
+	local user = _G.ItemRackUser
+	local sets = type(user) == "table" and user.Sets
+	if type(sets) ~= "table" then
 		return nil
 	end
+	local items = { keys = {}, ids = {} }
+	for name, set in pairs(sets) do
+		local equip = type(name) == "string" and name:sub(1, 1) ~= "~" and type(set) == "table" and set.equip
+		if type(equip) == "table" then
+			for _, id in pairs(equip) do
+				id = tostring(id)
+				local itemID = tonumber(id:match("^(%d+)"))
+				if itemID and itemID > 0 then
+					if id:find(":", 1, true) then
+						items.keys[ns.Items.Key("item:" .. id)] = true
+					else
+						items.ids[itemID] = true
+					end
+				end
+			end
+		end
+	end
+	return items
+end
+
+-- Whether the gear in a bag slot is in one of the character's equipment sets.
+-- itemRack: from ItemRackItems.
+local function InSet(itemRack, bag, slot, link, itemID)
+	if C.InEquipmentSet(bag, slot) then
+		return true
+	end
+	return itemRack ~= nil and (itemRack.keys[ns.Items.Key(link)] or itemRack.ids[itemID]) == true
+end
+
+-- Whether the gear in a bag slot is gear the character has worn. worn: from
+-- WornList.
+local function Worn(worn, bag, slot, inSet)
 	local guid = worn and C.BagItemGUID(bag, slot)
 	if guid and worn[guid] then
 		worn[guid] = time() -- still around: kept another year
 		return true
 	end
-	return C.InEquipmentSet(bag, slot) or nil
+	return inSet
 end
 
 --------------------------------------------------------------------------------
@@ -67,6 +110,7 @@ local function ReadContainer(bag, extra)
 	local size = C.NumSlots(bag)
 	local container = { size = size, family = size > 0 and C.BagFamily(bag) or 0, items = {} }
 	local worn = size > 0 and WornList()
+	local itemRack = size > 0 and ItemRackItems() or nil
 	if size > 0 then
 		container.name = C.Clean(C.BagName(bag))
 		container.link = C.BagLink(bag) -- the bag itself, if it is one worn in a slot
@@ -78,7 +122,10 @@ local function ReadContainer(bag, extra)
 			local item = { link = link, count = info.stackCount or 1, quality = C.Clean(info.quality) }
 			item.charges = ns.Items.Charges(link, info.itemID, C.BagTooltip, bag, slot)
 			item.bound = C.Clean(info.isBound) and true or nil -- soulbound, so not Bind on Equip any more
-			item.worn = Worn(worn, bag, slot, link, info.itemID)
+			if ns.Items.Get(link, info.itemID).isGear then
+				item.inSet = InSet(itemRack, bag, slot, link, info.itemID) or nil
+				item.worn = Worn(worn, bag, slot, item.inSet) or nil
+			end
 			if extra then
 				item.itemID = info.itemID
 				item.icon = info.iconFileID
@@ -112,7 +159,7 @@ local function Strip(containers)
 	for bag, container in pairs(containers) do
 		local items = {}
 		for slot, item in pairs(container.items) do
-			items[slot] = { link = item.link, count = item.count, quality = item.quality, charges = item.charges, bound = item.bound, worn = item.worn }
+			items[slot] = { link = item.link, count = item.count, quality = item.quality, charges = item.charges, bound = item.bound, worn = item.worn, inSet = item.inSet }
 		end
 		copy[bag] = {
 			size = container.size,
@@ -142,6 +189,7 @@ function Scanner.Records(containers, live)
 				charges = item.charges,
 				bound = item.bound,
 				worn = item.worn,
+				inSet = item.inSet,
 				itemID = item.itemID,
 				icon = item.icon,
 				bag = bag,
@@ -613,11 +661,24 @@ end)
 -- Gear put on or taken off.
 C.On("PLAYER_EQUIPMENT_CHANGED", C.Debounce(0.2, NoteEquipped))
 
--- An equipment set saved, changed or deleted: whose gear counts as worn.
-C.On("EQUIPMENT_SETS_CHANGED", function()
+-- An equipment set saved, changed or deleted: which gear is in a set, and so
+-- counts as worn.
+local function SetsChanged()
 	Scanner.BagsChanged()
 	if bankOpen then
 		QueueBank()
+	end
+end
+C.On("EQUIPMENT_SETS_CHANGED", SetsChanged)
+
+-- ItemRack tells other addons when one of its own sets is saved or deleted.
+C.On("PLAYER_LOGIN", function()
+	local itemRack = _G.ItemRack
+	local listen = type(itemRack) == "table" and itemRack.RegisterExternalEventListener
+	if type(listen) == "function" then
+		for _, event in ipairs({ "ITEMRACK_SET_SAVED", "ITEMRACK_SET_DELETED" }) do
+			pcall(listen, itemRack, event, SetsChanged)
+		end
 	end
 end)
 

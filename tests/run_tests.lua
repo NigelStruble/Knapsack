@@ -2478,6 +2478,85 @@ test("worn: gear on at login, equipment sets, and gear not seen for a year", fun
 	NoErrors(client)
 end)
 
+-- The names of a section's items, in alphabetical order.
+local function NameSet(section)
+	local names = {}
+	for _, rec in ipairs(section and section.records or {}) do
+		if not rec.gap then
+			names[#names + 1] = rec.info.name
+		end
+	end
+	table.sort(names)
+	return table.concat(names, ", ")
+end
+
+test("gear in an equipment set has a category of its own, first", function()
+	local client = Start(function(_, state)
+		state.containers[1].items[5] = { id = 16060, inSet = "Fishing" } -- a shirt in a set
+		state.containers[1].items[6] = { id = 1411, inSet = "Fishing" } -- a grey staff in it too
+	end)
+	local state, ns = client.state, client.ns
+	local bags = OpenBags(client)
+	equal(Titles(bags):match("^[^,]+"), "Equipment Sets", "first")
+	equal(NameSet(Section(bags, "sets")), "Common White Shirt, Withered Staff", "the set's gear, grey or not")
+	equal(Names(Section(bags, "equipment").records), "Green Sword of the Monkey", "the rest of the gear")
+	check(not Names(Section(bags, "junk").records):find("Staff", 1, true), "the staff is not junk")
+	local items = client.env.KnapsackDB.characters["Vedek-Doomhowl"].bags[1].items
+	check(items[5].inSet and items[6].inSet and not items[1].inSet, "recorded, for other characters to see")
+
+	-- A category of your own takes what its rules match first.
+	local shirts = ns.Categories.AddCustom("Shirts", { text = "shirt" })
+	Mock.Advance(state, 0.2)
+	equal(Names(Section(bags, shirts).records), "Common White Shirt", "the shirt in your own category")
+	ns.Categories.DeleteCustom(shirts)
+	Mock.Advance(state, 0.2)
+
+	-- The shirt taken out of the set.
+	state.containers[1].items[5].inSet = nil
+	Mock.Fire(state, "EQUIPMENT_SETS_CHANGED")
+	Mock.Advance(state, 0.5)
+	equal(client.env.KnapsackDB.characters["Vedek-Doomhowl"].bags[1].items[5].inSet, nil, "noted at once")
+	OpenBags(client)
+	OpenBags(client)
+	equal(NameSet(Section(bags, "sets")), "Withered Staff", "the shirt back with the rest")
+
+	-- An item dropped on another title stays there; the category can be hidden.
+	ns.Categories.Assign(1411, "equipment")
+	Mock.Advance(state, 0.2)
+	equal(Section(bags, "sets"), nil, "the staff dropped on Equipment")
+	ns.Categories.Unassign(1411)
+	ns.Categories.SetHidden("sets", true)
+	Mock.Advance(state, 0.2)
+	check(Names(Section(bags, "junk").records):find("Staff", 1, true), "hidden: the staff is junk again")
+	NoErrors(client)
+end)
+
+test("another character's gear in a set is under Equipment Sets too", function()
+	local client = Start(function(_, state)
+		state.saved = Other({})
+		state.saved.characters["Aria-Doomhowl"].bags[0].items[3] = { link = Mock.Link(16060), count = 1, quality = 1, inSet = true }
+	end)
+	local bags = OpenBags(client)
+	bags:SetOwner("Aria-Doomhowl")
+	equal(Names(Section(bags, "sets").records), "Common White Shirt", "from her record")
+	NoErrors(client)
+end)
+
+test("a new built-in category goes before the one it comes before by default", function()
+	local client = Start(function(_, state)
+		-- Saved before Equipment Sets existed, with Equipment moved down.
+		state.saved = { categories = { order = {
+			"consumables", "equipment", "reagents", "tradegoods", "recipes", "quest", "ammo", "containers", "keys", "misc", "junk",
+		} } }
+	end)
+	local keys = {}
+	for _, entry in ipairs(client.ns.Categories.List()) do
+		keys[#keys + 1] = entry.key
+	end
+	equal(table.concat(keys, " "), "consumables sets equipment reagents tradegoods recipes quest ammo containers keys misc junk", "next to Equipment")
+	NoErrors(client)
+end)
+
 test("new items go first until the bags close", function()
 	local client = Start(function(_, state)
 		state.containers[0].items[2].new = true -- Linen Cloth
@@ -3388,7 +3467,7 @@ test("Classic: the mailbox is read through the game's tooltip lines too", functi
 	NoErrors(client)
 end)
 
-test("Classic: worn gear is marked too (no equipment sets there)", function()
+test("Classic: worn gear is marked too (the game has no equipment sets there)", function()
 	local client = StartClassic()
 	local state = client.state
 	local bags = OpenBags(client)
@@ -3398,6 +3477,53 @@ test("Classic: worn gear is marked too (no equipment sets there)", function()
 	Mock.Advance(state, 0.5)
 	check(TileFor(bags, 12345).worn:IsShown(), "the sword it wore")
 	check(not TileFor(bags, 2210).worn:IsShown(), "the shield it did not")
+	NoErrors(client)
+end)
+
+test("Classic: ItemRack's sets fill Equipment Sets", function()
+	local listeners = {}
+	local client = StartClassic(function(env, state)
+		-- ItemRack's "heal", saved at level 70: the shirt and the staff in the
+		-- bags, and an enchanted shield (the shield in the bags has none).
+		state.containers[1].items[5] = { id = 16060 }
+		state.containers[1].items[6] = { id = 1411 }
+		env.ItemRackUser = { Sets = {
+			heal = { equip = {
+				[0] = "2512::::::::70::::::::::", -- the arrows: ammo, not gear
+				[4] = "16060::::::::70::::::::::",
+				[16] = "1411::::::::70::::::::::",
+				[17] = "2210:1900:::::::70::::::::::",
+				[1] = 0,
+			} },
+			["~CombatQueue"] = { equip = { [16] = "12345::::::::70::::::::::" } }, -- ItemRack's own workings
+		} }
+		env.ItemRack = {
+			RegisterExternalEventListener = function(_, event, handler)
+				listeners[event] = handler
+			end,
+		}
+	end)
+	local env, state = client.env, client.state
+	local bags = OpenBags(client)
+	equal(NameSet(Section(bags, "sets")), "Common White Shirt, Withered Staff", "the set's gear")
+	check(Names(Section(bags, "junk").records):find("Buckler", 1, true), "not a shield enchanted otherwise")
+	equal(Names(Section(bags, "equipment").records), "Green Sword of the Monkey", "nor the combat queue's sword")
+	equal(Names(Section(bags, "ammo").records), "Rough Arrow", "ammo in a set stays ammo")
+	equal(WornTiles(bags), "Common White Shirt, Withered Staff", "gear in a set counts as worn")
+	check(listeners.ITEMRACK_SET_SAVED and listeners.ITEMRACK_SET_DELETED, "ItemRack says when its sets change")
+
+	-- A set saved with the sword (by item ID alone, as older versions did), and
+	-- "heal" deleted.
+	env.ItemRackUser.Sets.dps = { equip = { [16] = "12345" } }
+	listeners.ITEMRACK_SET_SAVED("ITEMRACK_SET_SAVED", "dps")
+	Mock.Advance(state, 0.5)
+	check(env.KnapsackDB.characters["Vedek-Doomhowl"].bags[0].items[8].inSet, "the sword is in a set now")
+	env.ItemRackUser.Sets.heal = nil
+	listeners.ITEMRACK_SET_DELETED("ITEMRACK_SET_DELETED", "heal")
+	Mock.Advance(state, 0.5)
+	OpenBags(client)
+	OpenBags(client)
+	equal(NameSet(Section(bags, "sets")), "Green Sword of the Monkey", "only the sword's set is left")
 	NoErrors(client)
 end)
 

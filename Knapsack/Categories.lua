@@ -5,10 +5,12 @@ local L, DB = ns.L, ns.DB
 -- the first of these that takes it:
 --   1. the category it was dragged into (an item assignment)
 --   2. a custom category whose rules match, in list order
---   3. Junk, if the item is Poor (grey) quality
---   4. Quest Items
---   5. the category for its item type (Equipment, Consumables, ...)
---   6. Miscellaneous
+--   3. Equipment Sets, if the item is gear in one of the character's
+--      equipment sets (the game's or ItemRack's: rec.inSet, see Scanner.lua)
+--   4. Junk, if the item is Poor (grey) quality
+--   5. Quest Items
+--   6. the category for its item type (Equipment, Consumables, ...)
+--   7. Miscellaneous
 -- Hidden categories are skipped, so their items fall through to the next one.
 -- Sections are shown in list order, which the user can change.
 --
@@ -56,6 +58,8 @@ local CLASS = Categories.CLASS
 
 -- In default display order.
 local BUILT_IN = {
+	-- Gear in an equipment set, whatever its type or quality.
+	{ key = "sets", name = L["Equipment Sets"] },
 	{ key = "equipment", name = L["Equipment"], classes = { CLASS.Weapon, CLASS.Armor } },
 	{ key = "consumables", name = L["Consumables"], classes = { CLASS.Consumable } },
 	-- Spell reagents (Sacred Candles, Arcane Powder, Runes of Teleportation).
@@ -98,8 +102,9 @@ local function State()
 	return state
 end
 
--- Every built-in and custom category appears in the order exactly once. New
--- built-ins (from an update) go just before Miscellaneous.
+-- Every built-in and custom category appears in the order exactly once. A new
+-- built-in (from an update) goes just before the built-in it comes before by
+-- default, wherever that has been moved: Equipment Sets before Equipment.
 function Categories.Normalize()
 	local state = State()
 	local seen, order = {}, {}
@@ -109,16 +114,21 @@ function Categories.Normalize()
 			order[#order + 1] = key
 		end
 	end
-	for _, def in ipairs(BUILT_IN) do
+	for n, def in ipairs(BUILT_IN) do
 		if not seen[def.key] then
 			seen[def.key] = true
 			local at = #order + 1
-			if def.key ~= "misc" and def.key ~= "junk" then
+			for later = n + 1, #BUILT_IN do
+				local found
 				for i, key in ipairs(order) do
-					if key == "misc" then
-						at = i
+					if key == BUILT_IN[later].key then
+						found = i
 						break
 					end
+				end
+				if found then
+					at = found
+					break
 				end
 			end
 			tinsert(order, at, def.key)
@@ -406,6 +416,9 @@ function Categories.Classify(rec, info)
 		if custom and not hidden[key] and Matches(custom, quality, info, rec) then
 			return key
 		end
+	end
+	if rec.inSet and not hidden.sets then
+		return "sets"
 	end
 	if quality == 0 and not hidden.junk then
 		return "junk"

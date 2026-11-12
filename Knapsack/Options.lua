@@ -71,6 +71,7 @@ local PRICE_SOURCES = {
 
 -- What each built-in category holds, for the Categories page.
 local DESCRIPTIONS = {
+	sets = L["Gear in one of your equipment sets: the game's own, where ItemRack Forever keeps its sets, or ItemRack's."],
 	equipment = L["Weapons and armor, including rings, necklaces, trinkets and off-hands."],
 	consumables = L["Food, drink, potions, elixirs, flasks, scrolls and bandages."],
 	reagents = L["Spell reagents, such as Sacred Candles, Arcane Powder and Runes of Teleportation."],
