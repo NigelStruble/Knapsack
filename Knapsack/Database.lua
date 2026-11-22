@@ -124,22 +124,77 @@ local function PlayerSurname()
 	return nil
 end
 
--- The logged-in character: { name, surname, realm, realmName, key }. Nil
--- until the client knows the realm (PLAYER_LOGIN).
+local function Text(value)
+	value = C.Clean(value)
+	return type(value) == "string" and value ~= "" and value or nil
+end
+
+-- The realm as character keys name it ("Burning Legion" is "BurningLegion").
+local function NormalizedRealm()
+	local realm = Text(_G.GetNormalizedRealmName and _G.GetNormalizedRealmName())
+	if realm then
+		return realm
+	end
+	realm = Text(GetRealmName())
+	return realm and (realm:gsub("[%s%-]", ""))
+end
+
+-- The key of this character's own record, found without its realm: the one
+-- with its GUID, else the one with its name and surname seen last. A record
+-- with another GUID is another character's: two realms can each have a
+-- Vedek Md.
+local function OwnKey(name, surname, guid)
+	local best, bestSeen
+	for key, char in pairs(DB.characters) do
+		if guid and char.guid == guid then
+			return key
+		end
+		if char.name == name and (not surname or not char.surname or lower(char.surname) == lower(surname))
+			and not (guid and char.guid) then
+			local seen = char.seen or char.bagsTime or 0
+			if not best or seen > bestSeen then
+				best, bestSeen = key, seen
+			end
+		end
+	end
+	return best
+end
+
+-- The logged-in character: { name, surname, realm, realmName, key, guid }.
+-- Nil until the client knows its name (PLAYER_LOGIN). The client can also
+-- leave out the realm: after Forever's patch of 2026-11-20 both realm
+-- functions gave nothing all session, and with no character Knapsack
+-- recorded nothing. Then the character keeps its own record (see OwnKey),
+-- and a character with none yet is named by its realm's number in its GUID
+-- ("Player-6796-...").
 function DB.Player()
 	if not DB.player then
-		local name = C.Clean((UnitName("player")))
-		local realm = _G.GetNormalizedRealmName and _G.GetNormalizedRealmName()
-		if not name or not realm or realm == "" then
+		local name = Text((UnitName("player")))
+		if not name then
 			return nil
 		end
 		local surname = PlayerSurname()
+		local guid = Text(_G.UnitGUID and _G.UnitGUID("player"))
+		local fullName = surname and (name .. " " .. surname) or name
+		local realm, key = NormalizedRealm(), nil
+		if realm then
+			key = fullName .. "-" .. realm
+		else
+			key = OwnKey(name, surname, guid)
+			realm = key and key:match("^[^%-]*%-(.+)$") or (guid and guid:match("^Player%-(%d+)%-"))
+			if not realm then
+				return nil
+			end
+			key = key or (fullName .. "-" .. realm)
+		end
+		local known = DB.characters[key]
 		DB.player = {
 			name = name,
 			surname = surname,
 			realm = realm,
-			realmName = GetRealmName() or realm,
-			key = (surname and (name .. " " .. surname) or name) .. "-" .. realm,
+			realmName = Text(GetRealmName()) or (known and known.realm) or realm,
+			key = key,
+			guid = guid,
 		}
 	end
 	return DB.player
@@ -159,12 +214,25 @@ function DB.Character(key, create)
 	return char
 end
 
--- Before surnames were part of the key, a Forever character was saved as
--- "Name-Realm": its record moves to "First Last-Realm" the first time it is
--- looked up, unless that record belongs to another character with the same
--- first name.
+-- A character's record kept under another key moves to its key the first
+-- time it is looked up: one with its GUID, saved while the client gave no
+-- realm (see DB.Player); or, from before surnames were part of the key, a
+-- Forever character's "Name-Realm", unless that record belongs to another
+-- character with the same first name.
 local function MoveOldRecord(player)
-	if not player.surname or DB.characters[player.key] then
+	if DB.characters[player.key] then
+		return
+	end
+	if player.guid then
+		for key, char in pairs(DB.characters) do
+			if char.guid == player.guid then
+				DB.characters[player.key] = char
+				DB.characters[key] = nil
+				return
+			end
+		end
+	end
+	if not player.surname then
 		return
 	end
 	local oldKey = player.name .. "-" .. player.realm
@@ -232,6 +300,7 @@ function DB.UpdatePlayerInfo()
 	end
 	char.name = player.name
 	char.surname = player.surname or char.surname
+	char.guid = player.guid or char.guid
 	char.realm = player.realmName
 	char.class = select(2, UnitClass("player"))
 	char.level = UnitLevel("player")

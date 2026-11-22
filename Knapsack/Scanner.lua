@@ -286,17 +286,19 @@ function Scanner.LiveBags()
 	return liveBags
 end
 
+-- Records the bags, and tells the windows they changed. Should the character
+-- not be known (see DB.Player), there is nothing to record them in, but the
+-- live bags shown are still drawn again.
 function Scanner.SaveBags()
 	-- The backpack always has slots; none means the bags are not loaded.
 	if not inWorld or C.NumSlots(C.BAGS[1]) == 0 then
 		return
 	end
 	local char = DB.PlayerCharacter()
-	if not char then
-		return
+	if char then
+		char.bags = Strip(Scanner.LiveBags())
+		char.bagsTime = time()
 	end
-	char.bags = Strip(Scanner.LiveBags())
-	char.bagsTime = time()
 	ns.Send("bags", DB.PlayerKey())
 end
 
@@ -422,12 +424,11 @@ function Scanner.SaveBank()
 		return
 	end
 	local char = DB.PlayerCharacter()
-	if not char then
-		return
+	if char then
+		char.bank = Strip(Scanner.LiveBank())
+		char.bankTime = time()
+		char.bankBagSlots = C.BankBagSlots()
 	end
-	char.bank = Strip(Scanner.LiveBank())
-	char.bankTime = time()
-	char.bankBagSlots = C.BankBagSlots()
 	ns.Send("bank", DB.PlayerKey())
 end
 
@@ -740,11 +741,14 @@ C.On("BAG_UPDATE_COOLDOWN", function()
 end)
 
 C.On("PLAYER_MONEY", function()
-	local char = inWorld and DB.PlayerCharacter()
+	if not inWorld then
+		return
+	end
+	local char = DB.PlayerCharacter()
 	if char then
 		char.money = GetMoney()
-		ns.Send("money", DB.PlayerKey())
 	end
+	ns.Send("money", DB.PlayerKey())
 end)
 
 C.On("PLAYER_LEVEL_UP", function(_, level)

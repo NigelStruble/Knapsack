@@ -182,8 +182,10 @@ end
 ns.RefreshAll = RefreshAll
 
 local function Listen()
+	-- A window showing the live bags (or bank) is drawn again whenever they
+	-- change, even if the character could not be told (see DB.Player).
 	ns.Listen("bags", function(key)
-		if ns.bags.ownerKey == key then
+		if ns.bags.ownerKey == key or ns.bags.live then
 			ns.bags:QueueRefresh()
 		end
 		-- A bigger bag brings new slots: their buttons are made now, while
@@ -193,7 +195,7 @@ local function Listen()
 		end
 	end)
 	ns.Listen("bank", function(key)
-		if ns.bank.ownerKey == key then
+		if ns.bank.ownerKey == key or ns.bank.live then
 			ns.bank:QueueRefresh()
 		end
 	end)

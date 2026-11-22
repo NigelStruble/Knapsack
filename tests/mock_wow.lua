@@ -855,7 +855,7 @@ function Mock.New(options)
 		loadedAddons = {},
 		blizzard = {},
 		money = 123456,
-		player = { name = "Vedek", realm = "Doomhowl", class = "PRIEST", level = 60, spec = 1487, faction = "Alliance" },
+		player = { name = "Vedek", realm = "Doomhowl", guid = "Player-4618-0000ABCD", class = "PRIEST", level = 60, spec = 1487, faction = "Alliance" },
 	}
 	-- The links the client gives out: for the character as it is now.
 	function state.Link(itemID, crafter)
@@ -1098,11 +1098,16 @@ function Mock.New(options)
 	env.UnitFactionGroup = function()
 		return state.player.faction
 	end
+	-- realm "": as Forever after its patch of 2026-11-20, when both gave an
+	-- empty realm all session.
 	env.GetRealmName = function()
 		return state.player.realm
 	end
 	env.GetNormalizedRealmName = function()
-		return state.player.realm
+		return state.player.normalizedRealm or state.player.realm
+	end
+	env.UnitGUID = function(unit)
+		return unit == "player" and state.player.guid or nil
 	end
 	env.GetMoney = function()
 		return state.money

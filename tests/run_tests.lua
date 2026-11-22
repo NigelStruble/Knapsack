@@ -1436,6 +1436,151 @@ test("the open bags grow downward: nothing shown moves on the screen", function(
 	NoErrors(client)
 end)
 
+-- In-game report (2026-11-20): after a Forever patch the client gave no realm
+-- all session, Knapsack could not tell the character, recorded nothing, and
+-- the open bags never changed: a sold item stayed, an item put on kept its
+-- icon while the tooltip showed the one taken off.
+test("no realm from the client: the character keeps its record and the open bags change", function()
+	local client = Start(function(_, state)
+		state.player.realm = ""
+		state.saved = { characters = {
+			["Vedek-Doomhowl"] = { name = "Vedek", realm = "Doom Howl", seen = 1790000000 - 3600, bagsTime = 1790000000 - 3600 },
+			["Vedek-Oldrealm"] = { name = "Vedek", realm = "Oldrealm", seen = 1790000000 - 86400 * 30 }, -- before a realm rename
+		} }
+	end)
+	local state, ns = client.state, client.ns
+	equal(ns.DB.PlayerKey(), "Vedek-Doomhowl", "the record seen last")
+	local char = client.env.KnapsackDB.characters["Vedek-Doomhowl"]
+	equal(ns.DB.Player().realmName, "Doom Howl", "its realm's name, as the record has it")
+	equal(char.guid, "Player-4618-0000ABCD", "its GUID noted, to find it by")
+	local bags = OpenBags(client)
+	local before = char.bagsTime
+	Remove(client, 0, 4) -- the Sharp Claws, sold
+	equal(Names(Section(bags, "junk").records), "Battered Buckler, Rabbit's Foot, Ruined Pelt, -", "the sold claws leave a gap")
+	-- The sword put on, the helm worn before taken off into its slot.
+	Put(client, 0, 8, { id = 10205 })
+	check(TileFor(bags, 10205) and not TileFor(bags, 12345), "the helm shows, not the sword")
+	check(char.bagsTime > before and not char.bags[0].items[4], "recorded")
+	char.seen = nil
+	Mock.Fire(state, "PLAYER_LOGOUT")
+	check(char.seen, "seen at logout")
+	NoErrors(client)
+end)
+
+test("only the normalized realm missing: the realm's name without its spaces", function()
+	local client = Start(function(_, state)
+		state.player.realm = "Doom Howl"
+		state.player.normalizedRealm = ""
+	end)
+	equal(client.ns.DB.PlayerKey(), "Vedek-DoomHowl", "as the client would normalize it")
+	NoErrors(client)
+end)
+
+test("no realm and no record yet: named by the GUID's realm number, moved once the realm is back", function()
+	local client = Start(function(_, state)
+		state.player.realm = ""
+	end)
+	local saved = client.env.KnapsackDB
+	equal(client.ns.DB.PlayerKey(), "Vedek-4618", "the realm's number from the GUID")
+	check(saved.characters["Vedek-4618"].bags, "the bags recorded")
+	-- The next session has the realm again.
+	client = Start(function(_, state)
+		state.saved = saved
+	end)
+	saved = client.env.KnapsackDB
+	equal(client.ns.DB.PlayerKey(), "Vedek-Doomhowl", "the realm's own key")
+	check(saved.characters["Vedek-Doomhowl"].guid and not saved.characters["Vedek-4618"], "the record moved")
+	-- Without the realm once more, its GUID finds it, though another Vedek was
+	-- seen since.
+	saved.characters["Vedek-Elsewhere"] = { name = "Vedek", seen = 1790000000 + 86400 * 365 }
+	client = Start(function(_, state)
+		state.player.realm = ""
+		state.saved = saved
+	end)
+	equal(client.ns.DB.PlayerKey(), "Vedek-Doomhowl", "found by its GUID")
+	NoErrors(client)
+end)
+
+-- In game (2026-11-22): two characters called Vedek Md, a level 60 on Realm 1
+-- and a level 6 on Realm 5 last played in October. With no realm, the one
+-- played longer ago must not take the other's record for being seen less
+-- recently.
+test("no realm: a character with the same name and surname keeps its own record", function()
+	local recent, old = 1790000000 - 3600, 1790000000 - 86400 * 30
+	local function Saved()
+		return { characters = {
+			["Vedek Md-Realm1"] = { name = "Vedek", surname = "Md", realm = "Realm 1", level = 60,
+				guid = "Player-6796-000A1BAC", seen = recent, bagsTime = recent },
+			["Vedek Md-Realm5"] = { name = "Vedek", surname = "Md", realm = "Realm 5", level = 6, seen = old, bagsTime = old },
+		} }
+	end
+	local client = Start(function(_, state)
+		state.player.realm = ""
+		state.player.surname = "Md"
+		state.player.guid = "Player-6931-00040C3B"
+		state.saved = Saved()
+	end)
+	local chars = client.env.KnapsackDB.characters
+	equal(client.ns.DB.PlayerKey(), "Vedek Md-Realm5", "not the record with the other's GUID")
+	equal(chars["Vedek Md-Realm5"].guid, "Player-6931-00040C3B", "its own GUID noted")
+	check(chars["Vedek Md-Realm5"].bagsTime > old, "its bags recorded")
+	equal(chars["Vedek Md-Realm1"].guid, "Player-6796-000A1BAC", "the other keeps its GUID")
+	equal(chars["Vedek Md-Realm1"].bagsTime, recent, "and its bags")
+	equal(chars["Vedek Md-Realm1"].level, 60, "and its level")
+	NoErrors(client)
+
+	-- A third one, with no record yet, gets a record of its own.
+	client = Start(function(_, state)
+		state.player.realm = ""
+		state.player.surname = "Md"
+		state.player.guid = "Player-7001-00000001"
+		state.saved = Saved()
+		state.saved.characters["Vedek Md-Realm5"].guid = "Player-6931-00040C3B"
+	end)
+	equal(client.ns.DB.PlayerKey(), "Vedek Md-7001", "named by its GUID's realm number")
+	NoErrors(client)
+end)
+
+test("a character Knapsack cannot tell at all still sees its open bags change", function()
+	local client = Start(function(_, state)
+		state.player.realm = ""
+		state.player.guid = nil
+	end)
+	local state, ns = client.state, client.ns
+	equal(ns.DB.PlayerKey(), nil, "no character")
+	local bags = OpenBags(client)
+	Remove(client, 0, 4)
+	equal(Names(Section(bags, "junk").records), "Battered Buckler, Rabbit's Foot, Ruined Pelt, -", "the gap shows")
+	Put(client, 0, 12, { id = 7070, count = 2 })
+	equal(Names(Section(bags, "arrived").records), "Elemental Water", "and loot")
+	state.money = 654321 -- a sale
+	Mock.Fire(state, "PLAYER_MONEY")
+	Mock.Advance(state, 0.2)
+	check(Plain(bags.money:GetText()):find("65g 43s 21c", 1, true), "and the gold: " .. Plain(bags.money:GetText()))
+	equal(next(client.env.KnapsackDB.characters), nil, "with nothing recorded")
+
+	-- The bank window too, at the bank.
+	Bank(state)
+	VisitBank(client)
+	state.containers[6].items[2] = nil
+	Mock.Fire(state, "BAG_UPDATE", 6)
+	Mock.Fire(state, "BAG_UPDATE_DELAYED")
+	Mock.Advance(state, 1)
+	check(not TileFor(ns.bank, 7070), "the water taken out of the bank is gone from it")
+
+	-- The realm known later on: the windows, opened without it, still follow,
+	-- laid out afresh now that they know whose items they show.
+	state.player.realm = "Doomhowl"
+	state.containers[6].items[1] = nil -- the bank's silk, taken out
+	Mock.Fire(state, "BAG_UPDATE", 6)
+	Remove(client, 0, 5) -- the pelt, sold
+	check(not TileFor(ns.bank, 4306), "the silk gone from the bank window")
+	check(not Names(Section(bags, "junk").records):find("Ruined Pelt", 1, true), "the pelt gone from the bags")
+	check(client.env.KnapsackDB.characters["Vedek-Doomhowl"], "and the bags are recorded now")
+	LeaveBank(client)
+	NoErrors(client)
+end)
+
 test("the broom and the settings lay the bags out afresh; the option turns gaps off", function()
 	local client = Start(function(_, state)
 		state.containers[1].items[2] = { id = 4306, count = 5 }
