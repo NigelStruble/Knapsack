@@ -127,7 +127,7 @@ local function BuildGeneral(page)
 	left:Add(W.Checkbox(page, L["Put small categories side by side"], Get("compact"), Set("compact"),
 		L["Otherwise every category starts on its own row."]))
 	left:Add(W.Checkbox(page, L["Keep items in place while a window is open"], Get("keepPlaces"), Set("keepPlaces"),
-		L["An item you sell, deposit or use up leaves a gap in the bags or bank, so the rest stay where they are until you close the window. Items that come in go in Just added, at the very end."]))
+		L["An item you sell, deposit or use up leaves a gap in the bags or bank, so the rest stay where they are until you close the window. An item that comes in takes a gap in its own category if there is one, else it goes in Just added, at the very end."]))
 	left:Skip(6)
 	left:Add(W.Header(page, L["Tips"], 300))
 	left:Add(W.Note(page, L["Drop an item on a category's title in the bags to keep it in that category. Middle-click the item to undo it."], 300))
